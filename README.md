@@ -19,7 +19,7 @@ observable := rx_go.From([]int{1, 2, 3})
 3. **NewInterval** -  return observable from IntervalObserver observer
 ```go
 // Create interval which start from now
-interval := rx_go.IntervalObserver(time.Second, true)
+interval := rx_go.NewInterval(time.Second, true)
 ```
 4. **NewHttp** - return Observable from HttpObserver
 ```go
