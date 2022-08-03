@@ -5,8 +5,8 @@ import (
 	"net/http"
 )
 
-// NewHttpObserver create http Observer from the request and client
-func NewHttpObserver(client *http.Client, req *http.Request) (*Observer[[]byte], error) {
+// HttpObserver create http Observer from the request and client
+func HttpObserver(client *http.Client, req *http.Request) (*Observer[[]byte], error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -27,5 +27,6 @@ func NewHttpObserver(client *http.Client, req *http.Request) (*Observer[[]byte],
 
 	obs := NewObserver[[]byte]()
 	obs.Next(bytes)
+	obs.Complete()
 	return obs, nil
 }

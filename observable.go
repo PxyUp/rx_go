@@ -1,5 +1,11 @@
 package rx_go
 
+import (
+	"context"
+	"net/http"
+	"time"
+)
+
 type Observable[T any] struct {
 	observer *Observer[T]
 }
@@ -28,6 +34,20 @@ func From[T any](array ...T) *Observable[T] {
 	}
 }
 
+// NewInterval return Observable from IntervalObserver observer
+func NewInterval(duration time.Duration, startNow bool) *Observable[time.Time] {
+	return New[time.Time](IntervalObserver(duration, startNow))
+}
+
+// NewHttp - return Observable from HttpObserver
+func NewHttp(client *http.Client, req *http.Request) (*Observable[[]byte], error) {
+	obs, err := HttpObserver(client, req)
+	if err != nil {
+		return nil, err
+	}
+	return New[[]byte](obs), nil
+}
+
 // MapTo create new observable with modified values
 func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	obs := NewObserver[Y]()
@@ -48,13 +68,24 @@ func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 	return New(current)
 }
 
-func (o *Observable[T]) Subscribe() chan T {
+// Subscribe - create channel for reading values and unsubscribe function
+func (o *Observable[T]) Subscribe() (chan T, func()) {
 	t := make(chan T)
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(t)
-		for value := range o.observer.list {
-			t <- value
+		for {
+			select {
+			case <-ctx.Done():
+				o.observer.Complete()
+				return
+			case value, ok := <-o.observer.list:
+				if !ok {
+					return
+				}
+				t <- value
+			}
 		}
 	}()
-	return t
+	return t, cancel
 }

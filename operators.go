@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Debounce emit value if in provided amount of time new value was not emitted
 func Debounce[T any](duration time.Duration) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
 		observer := NewObserver[T]()
@@ -126,8 +127,8 @@ func Delay[T any](delay time.Duration) Operator[T] {
 		observer := NewObserver[T]()
 		go func() {
 			for v := range obs.list {
-				observer.Next(v)
 				time.Sleep(delay)
+				observer.Next(v)
 			}
 			observer.Complete()
 		}()
@@ -135,7 +136,7 @@ func Delay[T any](delay time.Duration) Operator[T] {
 	}
 }
 
-// FirstOne return first emited element from observable
+// FirstOne return first emitted element from observable
 func FirstOne[T any]() Operator[T] {
 	return Take[T](1)
 }

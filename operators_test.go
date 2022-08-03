@@ -10,7 +10,7 @@ import (
 
 func TestSleep(t *testing.T) {
 	values := []int{1, 2, 3}
-	ch := rx_go.From(values...).Pipe(rx_go.Delay[int](time.Second), rx_go.Debounce[int](time.Millisecond*500)).Subscribe()
+	ch, _ := rx_go.From(values...).Pipe(rx_go.Delay[int](time.Second), rx_go.Debounce[int](time.Millisecond*500)).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -20,7 +20,7 @@ func TestSleep(t *testing.T) {
 
 func TestDebounce(t *testing.T) {
 	values := []int{1, 2, 3}
-	ch := rx_go.From(values...).Pipe(rx_go.Debounce[int](time.Second)).Subscribe()
+	ch, _ := rx_go.From(values...).Pipe(rx_go.Debounce[int](time.Second)).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -32,7 +32,7 @@ func TestUntil(t *testing.T) {
 	values := []int{1, 2, 3}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := rx_go.From(values...).Pipe(
+	ch, _ := rx_go.From(values...).Pipe(
 		rx_go.Do(func(value int) {
 			if value == 2 {
 				cancel()
@@ -50,7 +50,7 @@ func TestUntil(t *testing.T) {
 func TestDo(t *testing.T) {
 	values := []int{1, 2, 3}
 	count := 0
-	ch := rx_go.From(values...).Pipe(
+	ch, _ := rx_go.From(values...).Pipe(
 		rx_go.Do(func(_ int) {
 			count += 1
 		}),
@@ -66,7 +66,7 @@ func TestDo(t *testing.T) {
 func TestDistinctWith(t *testing.T) {
 	values := []int{1, 2, 2, 2, 3, 4, 4, 4, 4}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.DistinctWith[int](func(a, b int) bool { return a == b })).Subscribe()
+	ch, _ := obs.Pipe(rx_go.DistinctWith[int](func(a, b int) bool { return a == b })).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -77,7 +77,7 @@ func TestDistinctWith(t *testing.T) {
 func TestDistinct(t *testing.T) {
 	values := []int{1, 2, 2, 2, 3, 4, 4, 4, 4}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.Distinct[int]()).Subscribe()
+	ch, _ := obs.Pipe(rx_go.Distinct[int]()).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -88,7 +88,7 @@ func TestDistinct(t *testing.T) {
 func TestTake(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.Take[int](3)).Subscribe()
+	ch, _ := obs.Pipe(rx_go.Take[int](3)).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -99,7 +99,7 @@ func TestTake(t *testing.T) {
 func TestFirstOne(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.FirstOne[int]()).Subscribe()
+	ch, _ := obs.Pipe(rx_go.FirstOne[int]()).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -110,7 +110,7 @@ func TestFirstOne(t *testing.T) {
 func TestLastOne(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.LastOne[int]()).Subscribe()
+	ch, _ := obs.Pipe(rx_go.LastOne[int]()).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -121,7 +121,7 @@ func TestLastOne(t *testing.T) {
 func TestFilter(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.Filter[int](func(value int) bool {
+	ch, _ := obs.Pipe(rx_go.Filter[int](func(value int) bool {
 		return value > 3
 	})).Subscribe()
 	var res []int
@@ -134,7 +134,7 @@ func TestFilter(t *testing.T) {
 func TestMap(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.Map[int](func(value int) int {
+	ch, _ := obs.Pipe(rx_go.Map[int](func(value int) int {
 		return value * 3
 	})).Subscribe()
 	var res []int
@@ -147,7 +147,7 @@ func TestMap(t *testing.T) {
 func TestFilterMap(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.Map[int](func(value int) int {
+	ch, _ := obs.Pipe(rx_go.Map[int](func(value int) int {
 		return value * 3
 	}), rx_go.Filter[int](func(value int) bool {
 		return value > 16
