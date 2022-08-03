@@ -26,6 +26,17 @@ func From[T any](array ...T) *Observable[T] {
 	}
 }
 
+func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
+	obs := NewObserver[Y]()
+	go func() {
+		for oldValue := range o.observer.list {
+			obs.Next(mapper(oldValue))
+		}
+		obs.Complete()
+	}()
+	return New(obs)
+}
+
 func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 	current := o.observer
 	for _, op := range operators {

@@ -2,6 +2,22 @@ package rx_go
 
 import "time"
 
+func Take[T any](count int) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			for value := range obs.list {
+				if count > 0 {
+					observer.Next(value)
+					count--
+				}
+			}
+			observer.Complete()
+		}()
+		return observer
+	}
+}
+
 func Delay[T any](delay time.Duration) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
 		observer := NewObserver[T]()

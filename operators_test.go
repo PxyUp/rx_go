@@ -6,6 +6,17 @@ import (
 	"testing"
 )
 
+func TestTake(t *testing.T) {
+	values := []int{1, 2, 3, 4, 5, 6}
+	obs := rx_go.From(values...)
+	ch := obs.Pipe(rx_go.Take[int](3)).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2, 3}, res)
+}
+
 func TestFirst(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
