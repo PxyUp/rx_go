@@ -1,10 +1,89 @@
 package rx_go_test
 
 import (
+	"context"
 	"github.com/PxyUp/rx_go"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
+
+func TestSleep(t *testing.T) {
+	values := []int{1, 2, 3}
+	ch := rx_go.From(values...).Pipe(rx_go.Delay[int](time.Second), rx_go.Debounce[int](time.Millisecond*500)).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2, 3}, res)
+}
+
+func TestDebounce(t *testing.T) {
+	values := []int{1, 2, 3}
+	ch := rx_go.From(values...).Pipe(rx_go.Debounce[int](time.Second)).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{3}, res)
+}
+
+func TestUntil(t *testing.T) {
+	values := []int{1, 2, 3}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := rx_go.From(values...).Pipe(
+		rx_go.Do(func(value int) {
+			if value == 2 {
+				cancel()
+			}
+		}),
+		rx_go.Until[int](ctx),
+	).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1}, res)
+}
+
+func TestDo(t *testing.T) {
+	values := []int{1, 2, 3}
+	count := 0
+	ch := rx_go.From(values...).Pipe(
+		rx_go.Do(func(_ int) {
+			count += 1
+		}),
+	).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2, 3}, res)
+	assert.Equal(t, 3, count)
+}
+
+func TestDistinctWith(t *testing.T) {
+	values := []int{1, 2, 2, 2, 3, 4, 4, 4, 4}
+	obs := rx_go.From(values...)
+	ch := obs.Pipe(rx_go.DistinctWith[int](func(a, b int) bool { return a == b })).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2, 3, 4}, res)
+}
+
+func TestDistinct(t *testing.T) {
+	values := []int{1, 2, 2, 2, 3, 4, 4, 4, 4}
+	obs := rx_go.From(values...)
+	ch := obs.Pipe(rx_go.Distinct[int]()).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2, 3, 4}, res)
+}
 
 func TestTake(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
@@ -17,10 +96,10 @@ func TestTake(t *testing.T) {
 	assert.Equal(t, []int{1, 2, 3}, res)
 }
 
-func TestFirst(t *testing.T) {
+func TestFirstOne(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.First[int]()).Subscribe()
+	ch := obs.Pipe(rx_go.FirstOne[int]()).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
@@ -28,10 +107,10 @@ func TestFirst(t *testing.T) {
 	assert.Equal(t, []int{1}, res)
 }
 
-func TestLast(t *testing.T) {
+func TestLastOne(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
-	ch := obs.Pipe(rx_go.Last[int]()).Subscribe()
+	ch := obs.Pipe(rx_go.LastOne[int]()).Subscribe()
 	var res []int
 	for val := range ch {
 		res = append(res, val)

@@ -6,12 +6,14 @@ type Observable[T any] struct {
 
 type Operator[T any] func(observer *Observer[T]) *Observer[T]
 
+// New create new observable with predefined observer
 func New[T any](observer *Observer[T]) *Observable[T] {
 	return &Observable[T]{
 		observer: observer,
 	}
 }
 
+// From create new observable from static array
 func From[T any](array ...T) *Observable[T] {
 	obs := NewObserver[T]()
 	go func() {
@@ -26,6 +28,7 @@ func From[T any](array ...T) *Observable[T] {
 	}
 }
 
+// MapTo create new observable with modified values
 func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	obs := NewObserver[Y]()
 	go func() {
