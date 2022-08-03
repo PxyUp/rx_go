@@ -9,8 +9,8 @@ This attempt to build generic version of Rx(Reactive) library
 # Observables
 1. **New** - create new observable from observer
 ```go
-observer := NewObserver[Y]()
-observable := New(observer)
+observer := rx_go.NewObserver[Y]()
+observable := rx_go.New(observer)
 ```
 2. **From** - create new observable from static array
 ```go
@@ -19,11 +19,11 @@ observable := rx_go.From([]int{1, 2, 3})
 3. **NewInterval** -  return observable from IntervalObserver observer
 ```go
 // Create interval which start from now
-interval := IntervalObserver(time.Second, true)
+interval := rx_go.IntervalObserver(time.Second, true)
 ```
 4. **NewHttp** - return Observable from HttpObserver
 ```go
-obs, err := NewHttp(http.DefaultClient, req)
+obs, err := rx_go.NewHttp(http.DefaultClient, req)
 ```
 5. **MapTo** - create new observable with modified values
 ```go
