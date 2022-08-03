@@ -1,26 +1,28 @@
 package rx_go
 
-import "time"
+import (
+	"time"
+)
 
 // IntervalObserver return Observer which produce value periodically
 func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time] {
-	timer := time.NewTimer(interval)
+	ticker := time.NewTicker(interval)
 	obs := NewObserver[time.Time]()
+
+	obs.onComplete = func() {
+		ticker.Stop()
+	}
 
 	go func() {
 		if startNow {
 			obs.Next(time.Now())
 		}
 
-		for v := range timer.C {
+		for v := range ticker.C {
 			obs.Next(v)
 		}
 		obs.Complete()
 	}()
-
-	obs.onComplete = func() {
-		timer.Stop()
-	}
 
 	return obs
 }

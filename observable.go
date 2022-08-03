@@ -61,11 +61,18 @@ func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 }
 
 func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
-	current := o.observer
+	old := o.observer
 	for _, op := range operators {
-		current = op(current)
+		copyOldCompleteFn := old.onComplete
+		newObs := op(old)
+		copyNewCompleteFn := newObs.onComplete
+		newObs.onComplete = func() {
+			copyOldCompleteFn()
+			copyNewCompleteFn()
+		}
+		old = newObs
 	}
-	return New(current)
+	return New(old)
 }
 
 // Subscribe - create channel for reading values and unsubscribe function

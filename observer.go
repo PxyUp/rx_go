@@ -1,6 +1,8 @@
 package rx_go
 
-import "sync"
+import (
+	"sync"
+)
 
 type Observer[T any] struct {
 	list       chan T
@@ -11,7 +13,8 @@ type Observer[T any] struct {
 
 func NewObserver[T any]() *Observer[T] {
 	return &Observer[T]{
-		list: make(chan T),
+		list:       make(chan T),
+		onComplete: func() {},
 	}
 }
 

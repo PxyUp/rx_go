@@ -44,3 +44,16 @@ func TestObservable_Subscribe(t *testing.T) {
 	}
 	assert.Equal(t, []int{1}, res)
 }
+
+func TestNewInterval(t *testing.T) {
+	ch, cancel := rx_go.NewInterval(time.Millisecond*300, true).Subscribe()
+	go func() {
+		time.Sleep(time.Second)
+		cancel()
+	}()
+	var res []time.Time
+	for v := range ch {
+		res = append(res, v)
+	}
+	assert.Len(t, res, 4)
+}
