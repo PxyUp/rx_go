@@ -102,6 +102,30 @@ func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Obse
 	return New(obs)
 }
 
+// Pairwise - groups pairs of consecutive emissions together and emits them as an array of two values.
+func Pairwise[T any](o *Observable[T]) *Observable[[2]T] {
+	obs := NewObserver[[2]T]()
+
+	go func() {
+		defer obs.Complete()
+		ch, cancel := o.Subscribe()
+		obs.SetOnComplete(func() {
+			cancel()
+		})
+
+		var prev *T
+		for value := range ch {
+			local := value
+			if prev != nil {
+				obs.Next([2]T{*prev, local})
+			}
+			prev = &local
+		}
+	}()
+
+	return New(obs)
+}
+
 // Reduce - create new observable which return accumulation value from all previous emitted items
 func Reduce[T any, Y any](o *Observable[T], mapper func(Y, T) Y, initValue Y) *Observable[Y] {
 	obs := NewObserver[Y]()

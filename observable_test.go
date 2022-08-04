@@ -59,6 +59,15 @@ func TestReduce(t *testing.T) {
 	}, res)
 }
 
+func TestPairwise(t *testing.T) {
+	ch, _ := rx_go.Pairwise[int](rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
+	var res [][2]int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, [][2]int{{1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}}, res)
+}
+
 func TestNew(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)

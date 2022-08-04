@@ -59,6 +59,10 @@ rx_go.Reduce(rx_go.From([]int{1, 2, 3, 4, 5, 6}...), func(y string, t int) strin
 	return y + fmt.Sprintf("%d", t)
 }, "").Subscribe()
 ```
+12. **Pairwise** - create new observable with groups pairs of consecutive emissions together and emits them as an array of two values.
+```go
+rx_go.Pairwise[int](rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
