@@ -1,6 +1,8 @@
 package rx_go
 
-import "context"
+import (
+	"context"
+)
 
 type Observable[T any] struct {
 	observer *Observer[T]

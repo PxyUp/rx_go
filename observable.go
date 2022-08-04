@@ -51,6 +51,12 @@ func NewHttp(client *http.Client, req *http.Request) (*Observable[[]byte], error
 func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Observable[Y] {
 	obs := NewObserver[Y]()
 	var cancelFns []func()
+	
+	obs.SetOnComplete(func() {
+		for _, fn := range cancelFns {
+			fn()
+		}
+	})
 
 	go func() {
 		topCh, cancelTop := o.Subscribe()
@@ -65,11 +71,6 @@ func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Obse
 			}
 		}
 
-		obs.SetOnComplete(func() {
-			for _, fn := range cancelFns {
-				fn()
-			}
-		})
 		obs.Complete()
 	}()
 	return New(obs)
