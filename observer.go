@@ -9,6 +9,7 @@ type Observer[T any] struct {
 
 	onComplete  func()
 	onSubscribe func()
+	onNext      func(value T)
 
 	completed bool
 	mutex     sync.Mutex
@@ -29,6 +30,7 @@ func NewObserver[T any]() *Observer[T] {
 		list:        make(chan T),
 		onComplete:  func() {},
 		onSubscribe: func() {},
+		onNext:      func(v T) {},
 	}
 }
 
@@ -52,6 +54,7 @@ func (o *Observer[T]) Next(value T) {
 		return
 	}
 	o.list <- value
+	o.onNext(value)
 }
 
 func (o *Observer[T]) Complete() {

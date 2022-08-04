@@ -93,10 +93,9 @@ func Do[T any](fn func(value T)) Operator[T] {
 		observer := NewObserver[T]()
 		go func() {
 			defer observer.Complete()
+			observer.onNext = fn
 			for value := range obs.list {
-				local := value
-				observer.Next(local)
-				fn(local)
+				observer.Next(value)
 			}
 		}()
 		return observer
