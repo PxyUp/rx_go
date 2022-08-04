@@ -56,6 +56,66 @@ func TestStartWith(t *testing.T) {
 	assert.Equal(t, []int{2, 1}, res)
 }
 
+func TestSkipUntil_Never(t *testing.T) {
+	ch, cancel := rx_go.From([]int{1, 2, 3}...).Pipe(
+		rx_go.SkipUntil[int, any](rx_go.Never),
+	).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Nil(t, res)
+	cancel()
+}
+
+func TestSkipUntilCtx_Never(t *testing.T) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+	ch, cancel := rx_go.From([]int{1, 2, 3}...).Pipe(
+		rx_go.SkipUntilCtx[int](ctx),
+	).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Nil(t, res)
+	cancel()
+}
+
+func TestSkipUntilCtx_Emitted(t *testing.T) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	ch, cancel := rx_go.From([]int{1, 2, 3}...).Pipe(
+		rx_go.Do(func(value int) {
+			if value == 2 {
+				cancelCtx()
+			}
+		}),
+		rx_go.SkipUntilCtx[int](ctx),
+	).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{2, 3}, res)
+	cancel()
+}
+
+func TestSkipUntil_Emitted(t *testing.T) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	ch, cancel := rx_go.From([]int{1, 2, 3}...).Pipe(
+		rx_go.AfterCtx[int](ctx),
+		rx_go.SkipUntil[int, int](rx_go.Of(1).Pipe(rx_go.Do(func(value int) {
+			cancelCtx()
+		}))),
+	).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2, 3}, res)
+	cancel()
+}
+
 func TestSkip(t *testing.T) {
 	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Skip[int](2)).Subscribe()
 	var res []int
@@ -68,20 +128,15 @@ func TestSkip(t *testing.T) {
 func TestAfterCtx(t *testing.T) {
 	values := []int{1, 2, 3}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	ch, _ := rx_go.From(values...).Pipe(
-		rx_go.Do(func(value int) {
-			if value == 2 {
-				cancel()
-			}
-		}),
 		rx_go.AfterCtx[int](ctx),
 	).Subscribe()
+	cancel()
 	var res []int
 	for val := range ch {
 		res = append(res, val)
 	}
-	assert.Equal(t, []int{2, 3}, res)
+	assert.Equal(t, []int{1, 2, 3}, res)
 }
 
 func TestUntilCtx(t *testing.T) {
@@ -100,7 +155,7 @@ func TestUntilCtx(t *testing.T) {
 	for val := range ch {
 		res = append(res, val)
 	}
-	assert.Equal(t, []int{1}, res)
+	assert.Equal(t, []int{1, 2}, res)
 }
 
 func TestDo(t *testing.T) {

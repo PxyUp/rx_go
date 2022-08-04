@@ -63,6 +63,10 @@ rx_go.Reduce(rx_go.From([]int{1, 2, 3, 4, 5, 6}...), func(y string, t int) strin
 ```go
 rx_go.Pairwise[int](rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
 ```
+13. **Never** - observable which never emiting
+```go
+rx_go.Never
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
@@ -132,7 +136,7 @@ obs.Pipe(rx_go.Take[int](3)).Subscribe()
 ```go
 rx_go.From(values...).Pipe(rx_go.Repeat[int](2)).Subscribe()
 ```
-13. **AfterCtx** - emit value after ctx is done, all value before is ignored
+13. **AfterCtx** - emit value after ctx is done(values not ignored, they are not emitted)
 ```go
 obs.Pipe(
     rx_go.AfterCtx[int](ctx),
@@ -149,4 +153,19 @@ rx_go.From([]int{1}...).Pipe(rx_go.StartWith(2)).Subscribe()
 16. **EndWith** -  end emitting with predefined value
 ```go
 rx_go.From([]int{1}...).Pipe(rx_go.EndWith(2)).Subscribe()
+```
+17. **SkipUntilCtx** - skips items emitted by the Observable until a ctx not done
+```go
+rx_go.From([]int{1, 2, 3}...).Pipe(
+	rx_go.SkipUntilCtx[int](ctx),
+).Subscribe()
+```
+18. **SkipUntil** - skips items emitted by the Observable until a second Observable emits an item(at least one).
+```go
+rx_go.From([]int{1, 2, 3}...).Pipe(
+    rx_go.AfterCtx[int](ctx),
+    rx_go.SkipUntil[int, int](rx_go.Of(1).Pipe(rx_go.Do(func(value int) {
+        cancelCtx()
+    }))),
+).Subscribe()
 ```

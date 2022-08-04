@@ -95,8 +95,68 @@ func Do[T any](fn func(value T)) Operator[T] {
 			defer observer.Complete()
 			for value := range obs.list {
 				local := value
-				fn(local)
 				observer.Next(local)
+				fn(local)
+			}
+		}()
+		return observer
+	}
+}
+
+// SkipUntilCtx - skips items emitted by the Observable until a ctx not done
+func SkipUntilCtx[T any](ctx context.Context) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+
+			for {
+				value, ok := <-obs.list
+				if !ok {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					observer.Next(value)
+				default:
+
+				}
+			}
+		}()
+		return observer
+	}
+}
+
+// SkipUntil - skips items emitted by the Observable until a second Observable emits an item(at least one).
+func SkipUntil[T any, Y any](o *Observable[Y]) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			ch, cancel := o.Subscribe()
+
+			observer.SetOnComplete(func() {
+				cancel()
+			})
+
+			emitted := make(chan struct{})
+
+			go func() {
+				<-ch
+				close(emitted)
+			}()
+
+			for {
+				value, ok := <-obs.list
+				if !ok {
+					return
+				}
+				select {
+				case <-emitted:
+					observer.Next(value)
+				default:
+
+				}
 			}
 		}()
 		return observer
@@ -121,7 +181,7 @@ func Skip[T any](count uint32) Operator[T] {
 	}
 }
 
-// AfterCtx - emit value after ctx is done, all value before is ignored
+// AfterCtx - emit value after ctx is done(values not ignored, they are not emitted)
 func AfterCtx[T any](ctx context.Context) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
 		observer := NewObserver[T]()
@@ -132,12 +192,8 @@ func AfterCtx[T any](ctx context.Context) Operator[T] {
 				if !ok {
 					return
 				}
-				select {
-				case <-ctx.Done():
-					observer.Next(value)
-				default:
-
-				}
+				<-ctx.Done()
+				observer.Next(value)
 			}
 		}()
 		return observer
