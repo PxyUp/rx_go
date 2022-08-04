@@ -71,8 +71,31 @@ func Do[T any](fn func(value T)) Operator[T] {
 	}
 }
 
-// Until emit value until context not done, if ctx is done value will not emit
-func Until[T any](ctx context.Context) Operator[T] {
+// AfterCtx - emit value after ctx is done, all value before is ignored
+func AfterCtx[T any](ctx context.Context) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			for {
+				value, ok := <-obs.list
+				if !ok {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					observer.Next(value)
+				default:
+
+				}
+			}
+		}()
+		return observer
+	}
+}
+
+// UntilCtx - emit value until context not done, if ctx is done value will not emit
+func UntilCtx[T any](ctx context.Context) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
 		observer := NewObserver[T]()
 		go func() {

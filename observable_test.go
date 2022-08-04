@@ -41,6 +41,24 @@ func TestConcat(t *testing.T) {
 	assert.Equal(t, []int{1, 2, 3, 4, 5, 6}, <-ch)
 }
 
+func TestReduce(t *testing.T) {
+	ch, _ := rx_go.Reduce(rx_go.From([]int{1, 2, 3, 4, 5, 6}...), func(y string, t int) string {
+		return y + fmt.Sprintf("%d", t)
+	}, "").Subscribe()
+	var res []string
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []string{
+		"1",
+		"12",
+		"123",
+		"1234",
+		"12345",
+		"123456",
+	}, res)
+}
+
 func TestNew(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)

@@ -38,7 +38,7 @@ func TestDebounce(t *testing.T) {
 	assert.Equal(t, []int{3}, res)
 }
 
-func TestUntil(t *testing.T) {
+func TestAfterCtx(t *testing.T) {
 	values := []int{1, 2, 3}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -48,7 +48,26 @@ func TestUntil(t *testing.T) {
 				cancel()
 			}
 		}),
-		rx_go.Until[int](ctx),
+		rx_go.AfterCtx[int](ctx),
+	).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{2, 3}, res)
+}
+
+func TestUntilCtx(t *testing.T) {
+	values := []int{1, 2, 3}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, _ := rx_go.From(values...).Pipe(
+		rx_go.Do(func(value int) {
+			if value == 2 {
+				cancel()
+			}
+		}),
+		rx_go.UntilCtx[int](ctx),
 	).Subscribe()
 	var res []int
 	for val := range ch {

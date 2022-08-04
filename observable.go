@@ -102,6 +102,26 @@ func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Obse
 	return New(obs)
 }
 
+// Reduce - create new observable which return accumulation value from all previous emitted items
+func Reduce[T any, Y any](o *Observable[T], mapper func(Y, T) Y, initValue Y) *Observable[Y] {
+	obs := NewObserver[Y]()
+
+	go func() {
+		defer obs.Complete()
+		ch, cancel := o.Subscribe()
+		obs.SetOnComplete(func() {
+			cancel()
+		})
+		iValue := initValue
+		for value := range ch {
+			iValue = mapper(iValue, value)
+			obs.Next(iValue)
+		}
+	}()
+
+	return New(obs)
+}
+
 // MapTo create new observable with modified values
 func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	obs := NewObserver[Y]()

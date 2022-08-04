@@ -53,6 +53,12 @@ rx_go.Of("hello").Subscribe()
 ```go
 rx_go.Concat(rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
 ```
+11. **Reduce** - create new observable which return accumulation value from all previous emitted items
+```go
+rx_go.Reduce(rx_go.From([]int{1, 2, 3, 4, 5, 6}...), func(y string, t int) string {
+	return y + fmt.Sprintf("%d", t)
+}, "").Subscribe()
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
@@ -100,10 +106,10 @@ obs.Pipe(
     }),
 ).Subscribe()
 ```
-8. **Until** - emit value until context not done
+8. **UntilCtx** - emit value until context not done
 ```go
 obs.Pipe(
-    rx_go.Until[int](ctx),
+    rx_go.UntilCtx[int](ctx),
 ).Subscribe()
 ```
 9. **Distinct** - execute value if they different from previous
@@ -121,4 +127,10 @@ obs.Pipe(rx_go.Take[int](3)).Subscribe()
 12. **Repeat** - emit value multiple times
 ```go
 rx_go.From(values...).Pipe(rx_go.Repeat[int](2)).Subscribe()
+```
+13. **AfterCtx** - emit value after ctx is done, all value before is ignored
+```go
+obs.Pipe(
+    rx_go.AfterCtx[int](ctx),
+).Subscribe()
 ```
