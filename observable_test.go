@@ -36,6 +36,11 @@ func TestOf(t *testing.T) {
 	assert.Equal(t, "hello", <-ch)
 }
 
+func TestConcat(t *testing.T) {
+	ch, _ := rx_go.Concat(rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
+	assert.Equal(t, []int{1, 2, 3, 4, 5, 6}, <-ch)
+}
+
 func TestNew(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)

@@ -20,7 +20,28 @@ func FromChannel[T any](ch <-chan T) *Observable[T] {
 
 // Of create static observable from one value
 func Of[T any](item T) *Observable[T] {
-	return From([]T{item}...)
+	return New(StaticObserver(item))
+}
+
+// Concat create static observable witch emit single array of all values
+func Concat[T any](o *Observable[T]) *Observable[[]T] {
+	obs := NewObserver[[]T]()
+
+	ch, cancel := o.Subscribe()
+	obs.SetOnComplete(func() {
+		cancel()
+	})
+
+	var res []T
+	go func() {
+		for v := range ch {
+			res = append(res, v)
+		}
+		obs.Next(res)
+		obs.Complete()
+	}()
+
+	return New(obs)
 }
 
 // From create new observable from static array

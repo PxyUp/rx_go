@@ -49,6 +49,10 @@ rx_go.Switch(rx_go.From([]int{1, 2, 3}...), func(value int) *rx_go.Observable[st
 ```go
 rx_go.Of("hello").Subscribe()
 ```
+10. **Concat** - create static observable witch emit single array of all values
+```go
+rx_go.Concat(rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
