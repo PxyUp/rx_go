@@ -54,7 +54,7 @@ func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	return New(obs)
 }
 
-// Merge merging multi observers with same type into single one
+// Merge merging multi observables with same type into single one
 func Merge[T any](obss ...*Observable[T]) *Observable[T] {
 	observer := NewObserver[T]()
 

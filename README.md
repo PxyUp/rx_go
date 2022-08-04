@@ -31,6 +31,10 @@ rx_go.MapTo[int, string](rx_go.From([]int{1, 2, 3}), func(t int) string {
 	return fmt.Sprintf("hello %d", t)
 }).Subscribe()
 ```
+6. **Merge** - merging multi observables with same type into single one
+```go
+rx_go.Merge[int](rx_go.From[int]([]int{1, 2, 3, 7}...), rx_go.From[int]([]int{4, 5, 6}...)).Subscribe()
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
