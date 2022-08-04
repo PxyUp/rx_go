@@ -1,16 +1,10 @@
 package rx_go
 
 import (
-	"context"
 	"net/http"
+	"sync"
 	"time"
 )
-
-type Observable[T any] struct {
-	observer *Observer[T]
-}
-
-type Operator[T any] func(observer *Observer[T]) *Observer[T]
 
 // New create new observable with predefined observer
 func New[T any](observer *Observer[T]) *Observable[T] {
@@ -60,39 +54,45 @@ func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	return New(obs)
 }
 
-func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
-	old := o.observer
-	for _, op := range operators {
-		copyOldCompleteFn := old.onComplete
-		newObs := op(old)
-		copyNewCompleteFn := newObs.onComplete
-		newObs.onComplete = func() {
-			copyOldCompleteFn()
-			copyNewCompleteFn()
-		}
-		old = newObs
-	}
-	return New(old)
-}
+// Merge merging multi observers with same type into single one
+func Merge[T any](obss ...*Observable[T]) *Observable[T] {
+	observer := NewObserver[T]()
 
-// Subscribe - create channel for reading values and unsubscribe function
-func (o *Observable[T]) Subscribe() (chan T, func()) {
-	t := make(chan T)
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		defer close(t)
-		for {
-			select {
-			case <-ctx.Done():
-				o.observer.Complete()
-				return
-			case value, ok := <-o.observer.list:
-				if !ok {
+	cleanFns := make([]func(), len(obss))
+	clean := make(chan struct{})
+	var wg sync.WaitGroup
+	for index, o := range obss {
+		wg.Add(1)
+		go func(index int, ob *Observable[T]) {
+			defer wg.Done()
+			ch, cancel := ob.Subscribe()
+			cleanFns[index] = cancel
+			for {
+				select {
+				case <-clean:
 					return
+				default:
+					value, ok := <-ch
+					if !ok {
+						return
+					}
+					observer.Next(value)
 				}
-				t <- value
 			}
+		}(index, o)
+	}
+
+	observer.onComplete = func() {
+		close(clean)
+		for _, v := range cleanFns {
+			v()
 		}
+	}
+
+	go func() {
+		wg.Wait()
+		observer.Complete()
 	}()
-	return t, cancel
+
+	return New(observer)
 }

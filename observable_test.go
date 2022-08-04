@@ -57,3 +57,19 @@ func TestNewInterval(t *testing.T) {
 	}
 	assert.Len(t, res, 4)
 }
+
+func TestMerge(t *testing.T) {
+	ch, _ := rx_go.Merge[int](rx_go.From[int]([]int{1, 2, 3, 7}...), rx_go.From[int]([]int{4, 5, 6}...)).Subscribe()
+	var res []int
+	for v := range ch {
+		res = append(res, v)
+	}
+	assert.Contains(t, res, 1)
+	assert.Contains(t, res, 2)
+	assert.Contains(t, res, 3)
+	assert.Contains(t, res, 4)
+	assert.Contains(t, res, 5)
+	assert.Contains(t, res, 6)
+	assert.Contains(t, res, 7)
+	assert.Len(t, res, 7)
+}
