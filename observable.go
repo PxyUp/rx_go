@@ -47,15 +47,49 @@ func NewHttp(client *http.Client, req *http.Request) (*Observable[[]byte], error
 	return New[[]byte](obs), nil
 }
 
+// Switch change stream for each value
+func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Observable[Y] {
+	obs := NewObserver[Y]()
+	var cancelFns []func()
+
+	go func() {
+		topCh, cancelTop := o.Subscribe()
+		cancelFns = append(cancelFns, cancelTop)
+
+		for oldValue := range topCh {
+			localValue := oldValue
+			ch, cancel := mapper(localValue).Subscribe()
+			cancelFns = append(cancelFns, cancel)
+			for v := range ch {
+				obs.Next(v)
+			}
+		}
+
+		obs.SetOnComplete(func() {
+			for _, fn := range cancelFns {
+				fn()
+			}
+		})
+		obs.Complete()
+	}()
+	return New(obs)
+}
+
 // MapTo create new observable with modified values
 func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	obs := NewObserver[Y]()
+
 	go func() {
-		for oldValue := range o.observer.list {
-			obs.Next(mapper(oldValue))
+		defer obs.Complete()
+		ch, cancel := o.Subscribe()
+		obs.SetOnComplete(func() {
+			cancel()
+		})
+		for value := range ch {
+			obs.Next(mapper(value))
 		}
-		obs.Complete()
 	}()
+
 	return New(obs)
 }
 

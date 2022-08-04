@@ -8,6 +8,17 @@ import (
 	"time"
 )
 
+func TestSwitch(t *testing.T) {
+	ch, _ := rx_go.Switch(rx_go.From([]int{1, 2, 3}...), func(value int) *rx_go.Observable[string] {
+		return rx_go.From(fmt.Sprintf("HELLO %d", value)).Pipe(rx_go.Repeat[string](2))
+	}).Subscribe()
+	var res []string
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []string{"HELLO 1", "HELLO 1", "HELLO 2", "HELLO 2", "HELLO 3", "HELLO 3"}, res)
+}
+
 func TestMapTo(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	ch, _ := rx_go.MapTo[int, string](rx_go.From(values...), func(t int) string {

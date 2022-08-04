@@ -39,6 +39,12 @@ rx_go.Merge[int](rx_go.From[int]([]int{1, 2, 3, 7}...), rx_go.From[int]([]int{4,
 ```go
 rx_go.FromChannel[int](intChannel).Subscribe()
 ```
+8. **Switch** - change stream for observable
+```go
+rx_go.Switch(rx_go.From([]int{1, 2, 3}...), func(value int) *rx_go.Observable[string] {
+	return rx_go.From(fmt.Sprintf("HELLO %d", value)).Pipe(rx_go.Repeat[string](2))
+}).Subscribe()
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
