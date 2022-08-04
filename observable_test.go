@@ -73,3 +73,21 @@ func TestMerge(t *testing.T) {
 	assert.Contains(t, res, 7)
 	assert.Len(t, res, 7)
 }
+
+func TestFromChannel(t *testing.T) {
+	intChan := make(chan int)
+	go func() {
+		intChan <- 1
+		intChan <- 2
+		close(intChan)
+	}()
+
+	ch, _ := rx_go.FromChannel(intChan).Subscribe()
+	var res []int
+	for v := range ch {
+		res = append(res, v)
+	}
+	assert.Contains(t, res, 1)
+	assert.Contains(t, res, 2)
+	assert.Len(t, res, 2)
+}

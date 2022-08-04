@@ -13,6 +13,11 @@ func New[T any](observer *Observer[T]) *Observable[T] {
 	}
 }
 
+// FromChannel create new observable from readable channel
+func FromChannel[T any](ch <-chan T) *Observable[T] {
+	return New[T](ChannelObserver(ch))
+}
+
 // From create new observable from static array
 func From[T any](array ...T) *Observable[T] {
 	obs := NewObserver[T]()
@@ -82,12 +87,12 @@ func Merge[T any](obss ...*Observable[T]) *Observable[T] {
 		}(index, o)
 	}
 
-	observer.onComplete = func() {
+	observer.SetOnComplete(func() {
 		close(clean)
 		for _, v := range cleanFns {
 			v()
 		}
-	}
+	})
 
 	go func() {
 		wg.Wait()

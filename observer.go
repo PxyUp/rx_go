@@ -22,6 +22,18 @@ func NewObserver[T any]() *Observer[T] {
 	}
 }
 
+func (o *Observer[T]) SetOnComplete(fn func()) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	o.onComplete = fn
+}
+
+func (o *Observer[T]) SetOnSubscribe(fn func()) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	o.onSubscribe = fn
+}
+
 func (o *Observer[T]) Next(value T) {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()

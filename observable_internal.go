@@ -19,15 +19,15 @@ func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 		copyNewOnCompleteFn := newObs.onComplete
 		copyNewOnSubscribeFn := newObs.onSubscribe
 
-		newObs.onComplete = func() {
+		newObs.SetOnComplete(func() {
 			copyOldOnCompleteFn()
 			copyNewOnCompleteFn()
-		}
+		})
 
-		newObs.onSubscribe = func() {
+		newObs.SetOnSubscribe(func() {
 			copyOldOnSubscribeFn()
 			copyNewOnSubscribeFn()
-		}
+		})
 
 		old = newObs
 	}
@@ -38,8 +38,11 @@ func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 func (o *Observable[T]) Subscribe() (chan T, func()) {
 	t := make(chan T)
 	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
-		o.observer.onSubscribe()
+		if o.observer.onSubscribe != nil {
+			o.observer.onSubscribe()
+		}
 
 		defer close(t)
 		for {

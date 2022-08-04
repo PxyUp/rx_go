@@ -35,6 +35,10 @@ rx_go.MapTo[int, string](rx_go.From([]int{1, 2, 3}), func(t int) string {
 ```go
 rx_go.Merge[int](rx_go.From[int]([]int{1, 2, 3, 7}...), rx_go.From[int]([]int{4, 5, 6}...)).Subscribe()
 ```
+7. **FromChannel** - create new observable from readable channel
+```go
+rx_go.FromChannel[int](intChannel).Subscribe()
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function

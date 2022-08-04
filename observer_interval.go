@@ -9,9 +9,9 @@ func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time
 	ticker := time.NewTicker(interval)
 	obs := NewObserver[time.Time]()
 
-	obs.onComplete = func() {
+	obs.SetOnComplete(func() {
 		ticker.Stop()
-	}
+	})
 
 	waiting := make(chan struct{})
 	subscribed := false
@@ -20,7 +20,7 @@ func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time
 		if subscribed {
 			return
 		}
-		
+
 		subscribed = true
 		close(waiting)
 	}
