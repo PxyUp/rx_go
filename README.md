@@ -134,3 +134,7 @@ obs.Pipe(
     rx_go.AfterCtx[int](ctx),
 ).Subscribe()
 ```
+14. **Skip** - that skips the first count items emitted
+```go
+rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Skip[int](2)).Subscribe()
+```

@@ -71,6 +71,24 @@ func Do[T any](fn func(value T)) Operator[T] {
 	}
 }
 
+// Skip - that skips the first count items emitted
+func Skip[T any](count uint32) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			for v := range obs.list {
+				if count > 0 {
+					count--
+					continue
+				}
+				observer.Next(v)
+			}
+		}()
+		return observer
+	}
+}
+
 // AfterCtx - emit value after ctx is done, all value before is ignored
 func AfterCtx[T any](ctx context.Context) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {

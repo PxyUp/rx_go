@@ -38,6 +38,15 @@ func TestDebounce(t *testing.T) {
 	assert.Equal(t, []int{3}, res)
 }
 
+func TestSkip(t *testing.T) {
+	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Skip[int](2)).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{3}, res)
+}
+
 func TestAfterCtx(t *testing.T) {
 	values := []int{1, 2, 3}
 	ctx, cancel := context.WithCancel(context.Background())
