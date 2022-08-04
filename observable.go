@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+var (
+	// Never -  which never emit
+	Never = New(NewObserver[any]())
+)
+
 // New create new observable with predefined observer
 func New[T any](observer *Observer[T]) *Observable[T] {
 	return &Observable[T]{

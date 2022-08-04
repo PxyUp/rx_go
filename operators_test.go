@@ -38,6 +38,24 @@ func TestDebounce(t *testing.T) {
 	assert.Equal(t, []int{3}, res)
 }
 
+func TestEndWith(t *testing.T) {
+	ch, _ := rx_go.From([]int{1}...).Pipe(rx_go.EndWith(2)).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2}, res)
+}
+
+func TestStartWith(t *testing.T) {
+	ch, _ := rx_go.From([]int{1}...).Pipe(rx_go.StartWith(2)).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{2, 1}, res)
+}
+
 func TestSkip(t *testing.T) {
 	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Skip[int](2)).Subscribe()
 	var res []int

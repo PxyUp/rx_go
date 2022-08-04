@@ -6,6 +6,38 @@ import (
 	"time"
 )
 
+// EndWith - end emitting with predefined value
+func EndWith[T any](value T) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			defer observer.Next(value)
+			for val := range obs.list {
+				observer.Next(val)
+			}
+
+		}()
+		return observer
+	}
+}
+
+// StartWith - start emitting with predefined value
+func StartWith[T any](value T) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			observer.Next(value)
+			for val := range obs.list {
+				observer.Next(val)
+			}
+
+		}()
+		return observer
+	}
+}
+
 // Repeat emit value multiple times
 func Repeat[T any](times uint32) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {

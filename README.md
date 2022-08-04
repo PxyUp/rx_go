@@ -142,3 +142,11 @@ obs.Pipe(
 ```go
 rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Skip[int](2)).Subscribe()
 ```
+15. **StartWith** -  start emitting with predefined value
+```go
+rx_go.From([]int{1}...).Pipe(rx_go.StartWith(2)).Subscribe()
+```
+16. **EndWith** -  end emitting with predefined value
+```go
+rx_go.From([]int{1}...).Pipe(rx_go.EndWith(2)).Subscribe()
+```
