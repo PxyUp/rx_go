@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+func TestRepeat(t *testing.T) {
+	values := []int{1, 2, 3}
+	ch, _ := rx_go.From(values...).Pipe(rx_go.Repeat[int](2)).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 1, 2, 2, 3, 3}, res)
+}
+
 func TestSleep(t *testing.T) {
 	values := []int{1, 2, 3}
 	ch, _ := rx_go.From(values...).Pipe(rx_go.Delay[int](time.Second), rx_go.Debounce[int](time.Millisecond*500)).Subscribe()

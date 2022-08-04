@@ -104,3 +104,7 @@ obs.Pipe(rx_go.DistinctWith[int](func(a, b int) bool { return a == b })).Subscri
 ```go
 obs.Pipe(rx_go.Take[int](3)).Subscribe()
 ```
+12. **Repeat** - emit value multiple times
+```go
+rx_go.From(values...).Pipe(rx_go.Repeat[int](2)).Subscribe()
+```

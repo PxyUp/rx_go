@@ -6,6 +6,26 @@ import (
 	"time"
 )
 
+// Repeat emit value multiple times
+func Repeat[T any](times uint32) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			for value := range obs.list {
+				local := value
+				count := times
+				for count > 0 {
+					observer.Next(local)
+					count--
+				}
+			}
+
+		}()
+		return observer
+	}
+}
+
 // Debounce emit value if in provided amount of time new value was not emitted
 func Debounce[T any](duration time.Duration) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
