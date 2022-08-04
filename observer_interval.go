@@ -26,6 +26,7 @@ func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time
 	}
 
 	go func() {
+		defer obs.Complete()
 		<-waiting
 
 		if startNow {
@@ -35,7 +36,7 @@ func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time
 		for v := range ticker.C {
 			obs.Next(v)
 		}
-		obs.Complete()
+
 	}()
 
 	return obs
