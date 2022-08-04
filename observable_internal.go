@@ -11,13 +11,24 @@ type Operator[T any] func(observer *Observer[T]) *Observer[T]
 func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 	old := o.observer
 	for _, op := range operators {
-		copyOldCompleteFn := old.onComplete
+
+		copyOldOnCompleteFn := old.onComplete
+		copyOldOnSubscribeFn := old.onSubscribe
+
 		newObs := op(old)
-		copyNewCompleteFn := newObs.onComplete
+		copyNewOnCompleteFn := newObs.onComplete
+		copyNewOnSubscribeFn := newObs.onSubscribe
+
 		newObs.onComplete = func() {
-			copyOldCompleteFn()
-			copyNewCompleteFn()
+			copyOldOnCompleteFn()
+			copyNewOnCompleteFn()
 		}
+
+		newObs.onSubscribe = func() {
+			copyOldOnSubscribeFn()
+			copyNewOnSubscribeFn()
+		}
+
 		old = newObs
 	}
 	return New(old)
@@ -28,6 +39,8 @@ func (o *Observable[T]) Subscribe() (chan T, func()) {
 	t := make(chan T)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
+		o.observer.onSubscribe()
+
 		defer close(t)
 		for {
 			select {

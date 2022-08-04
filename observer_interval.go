@@ -1,7 +1,6 @@
 package rx_go
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -11,11 +10,24 @@ func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time
 	obs := NewObserver[time.Time]()
 
 	obs.onComplete = func() {
-		fmt.Println("TIMER STOP")
 		ticker.Stop()
 	}
 
+	waiting := make(chan struct{})
+	subscribed := false
+
+	obs.onSubscribe = func() {
+		if subscribed {
+			return
+		}
+		
+		subscribed = true
+		close(waiting)
+	}
+
 	go func() {
+		<-waiting
+
 		if startNow {
 			obs.Next(time.Now())
 		}
