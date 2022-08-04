@@ -25,12 +25,5 @@ func HttpObserver(client *http.Client, req *http.Request) (*Observer[[]byte], er
 		return nil, err
 	}
 
-	obs := NewObserver[[]byte]()
-
-	go func() {
-		obs.Next(bytes)
-		obs.Complete()
-	}()
-
-	return obs, nil
+	return StaticObserver(bytes), nil
 }

@@ -18,6 +18,11 @@ func FromChannel[T any](ch <-chan T) *Observable[T] {
 	return New[T](ChannelObserver(ch))
 }
 
+// Of create static observable from one value
+func Of[T any](item T) *Observable[T] {
+	return From([]T{item}...)
+}
+
 // From create new observable from static array
 func From[T any](array ...T) *Observable[T] {
 	obs := NewObserver[T]()
@@ -51,7 +56,7 @@ func NewHttp(client *http.Client, req *http.Request) (*Observable[[]byte], error
 func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Observable[Y] {
 	obs := NewObserver[Y]()
 	var cancelFns []func()
-	
+
 	obs.SetOnComplete(func() {
 		for _, fn := range cancelFns {
 			fn()

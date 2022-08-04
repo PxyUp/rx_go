@@ -14,6 +14,16 @@ type Observer[T any] struct {
 	mutex     sync.Mutex
 }
 
+// StaticObserver create static observer from one value
+func StaticObserver[T any](value T) *Observer[T] {
+	obs := NewObserver[T]()
+	go func() {
+		obs.Next(value)
+		obs.Complete()
+	}()
+	return obs
+}
+
 func NewObserver[T any]() *Observer[T] {
 	return &Observer[T]{
 		list:        make(chan T),

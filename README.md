@@ -45,6 +45,10 @@ rx_go.Switch(rx_go.From([]int{1, 2, 3}...), func(value int) *rx_go.Observable[st
 	return rx_go.From(fmt.Sprintf("HELLO %d", value)).Pipe(rx_go.Repeat[string](2))
 }).Subscribe()
 ```
+9. **Of** - create static observable with one value
+```go
+rx_go.Of("hello").Subscribe()
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
@@ -92,7 +96,7 @@ obs.Pipe(
     }),
 ).Subscribe()
 ```
-8. **Until** - execute value until context not done
+8. **Until** - emit value until context not done
 ```go
 obs.Pipe(
     rx_go.Until[int](ctx),

@@ -31,6 +31,11 @@ func TestMapTo(t *testing.T) {
 	assert.Equal(t, []string{"hello 1", "hello 2", "hello 3", "hello 4", "hello 5", "hello 6"}, res)
 }
 
+func TestOf(t *testing.T) {
+	ch, _ := rx_go.Of("hello").Subscribe()
+	assert.Equal(t, "hello", <-ch)
+}
+
 func TestNew(t *testing.T) {
 	values := []int{1, 2, 3, 4, 5, 6}
 	obs := rx_go.From(values...)
