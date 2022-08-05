@@ -15,6 +15,18 @@ type Observer[T any] struct {
 	mutex     sync.Mutex
 }
 
+// ArrayObserver create observer from array
+func ArrayObserver[T any](items ...T) *Observer[T] {
+	obs := NewObserver[T]()
+	go func() {
+		for _, j := range items {
+			obs.Next(j)
+		}
+		obs.Complete()
+	}()
+	return obs
+}
+
 // StaticObserver create static observer from one value
 func StaticObserver[T any](value T) *Observer[T] {
 	obs := NewObserver[T]()

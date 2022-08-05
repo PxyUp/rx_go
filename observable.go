@@ -51,16 +51,8 @@ func Concat[T any](o *Observable[T]) *Observable[[]T] {
 
 // From create new observable from static array
 func From[T any](array ...T) *Observable[T] {
-	obs := NewObserver[T]()
-	go func() {
-		for _, j := range array {
-			obs.Next(j)
-		}
-		obs.Complete()
-	}()
-
 	return &Observable[T]{
-		observer: obs,
+		observer: ArrayObserver(array...),
 	}
 }
 
