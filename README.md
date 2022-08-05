@@ -179,3 +179,9 @@ rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Finally[int](func() {
 ```go
 rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.ElementAt[int](1)).Subscribe()
 ```
+21. **Find** - only the first value emitted by the source Observable that meets some condition.
+```go
+rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Find(func(t int) bool {
+	return t == 3
+})).Subscribe()
+```

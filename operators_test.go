@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+func TestFind(t *testing.T) {
+	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Find(func(t int) bool {
+		return t == 3
+	})).Subscribe()
+	assert.Equal(t, 3, <-ch)
+}
+
 func TestElementAt(t *testing.T) {
 	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.ElementAt[int](1)).Subscribe()
 	assert.Equal(t, 2, <-ch)

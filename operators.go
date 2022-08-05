@@ -6,6 +6,26 @@ import (
 	"time"
 )
 
+// Find - only the first value emitted by the source Observable that meets some condition.
+func Find[T any](fn func(T) bool) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			emitted := false
+			for val := range obs.list {
+				local := val
+				if fn(local) && !emitted {
+					emitted = true
+					observer.Next(local)
+				}
+			}
+
+		}()
+		return observer
+	}
+}
+
 // ElementAt - emit single value from observable which contains element on this position
 func ElementAt[T any](index uint32) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
