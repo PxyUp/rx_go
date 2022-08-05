@@ -2,11 +2,25 @@ package rx_go_test
 
 import (
 	"context"
+	"fmt"
 	"github.com/PxyUp/rx_go"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 )
+
+func TestSwitch_Complex(t *testing.T) {
+	ch, _ := rx_go.Switch[int, string](rx_go.From[int]([]int{1, 2, 3}...), func(t int) *rx_go.Observable[string] {
+		return rx_go.MapTo[time.Time, string](rx_go.NewInterval(time.Second, true).Pipe(rx_go.Take[time.Time](1)), func(_ time.Time) string {
+			return fmt.Sprintf("OBSERVER %d", t)
+		})
+	}).Subscribe()
+	var res []string
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []string{"OBSERVER 1", "OBSERVER 2", "OBSERVER 3"}, res)
+}
 
 func TestRepeat(t *testing.T) {
 	values := []int{1, 2, 3}

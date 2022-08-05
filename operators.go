@@ -262,6 +262,9 @@ func Take[T any](count int) Operator[T] {
 				if count > 0 {
 					observer.Next(value)
 					count--
+					continue
+				} else {
+					return
 				}
 			}
 		}()
