@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+func TestElementAt(t *testing.T) {
+	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.ElementAt[int](1)).Subscribe()
+	assert.Equal(t, 2, <-ch)
+}
+
 func TestFinally(t *testing.T) {
 	done := false
 	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Finally[int](func() {

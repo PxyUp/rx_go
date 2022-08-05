@@ -6,6 +6,25 @@ import (
 	"time"
 )
 
+// ElementAt - emit single value from observable which contains element on this position
+func ElementAt[T any](index uint32) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			i := 0
+			for val := range obs.list {
+				if i == int(index) {
+					observer.Next(val)
+				}
+				i++
+			}
+
+		}()
+		return observer
+	}
+}
+
 // Finally - do action before closing of observer(last value already emitted but observer not completed yet)
 func Finally[T any](fn func()) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
