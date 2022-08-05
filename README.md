@@ -177,5 +177,5 @@ rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Finally[int](func() {
 ```
 20. **ElementAt** - emit single value from observable which contains element on this position
 ```go
-
+rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.ElementAt[int](1)).Subscribe()
 ```
