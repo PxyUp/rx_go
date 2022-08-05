@@ -6,6 +6,22 @@ import (
 	"time"
 )
 
+// Finally - do action before closing of observer(last value already emitted but observer not completed yet)
+func Finally[T any](fn func()) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			defer observer.Complete()
+			defer fn()
+			for val := range obs.list {
+				observer.Next(val)
+			}
+
+		}()
+		return observer
+	}
+}
+
 // EndWith - end emitting with predefined value
 func EndWith[T any](value T) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {

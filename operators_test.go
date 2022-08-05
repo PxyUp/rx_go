@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+func TestFinally(t *testing.T) {
+	done := false
+	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Finally[int](func() {
+		done = true
+	})).Subscribe()
+	var res []int
+	for val := range ch {
+		res = append(res, val)
+	}
+	assert.Equal(t, []int{1, 2, 3}, res)
+	assert.True(t, done)
+}
+
 func TestSwitch_Complex(t *testing.T) {
 	ch, _ := rx_go.Switch[int, string](rx_go.From[int]([]int{1, 2, 3}...), func(t int) *rx_go.Observable[string] {
 		return rx_go.MapTo[time.Time, string](rx_go.NewInterval(time.Second, true).Pipe(rx_go.Take[time.Time](1)), func(_ time.Time) string {

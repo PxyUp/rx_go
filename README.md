@@ -169,3 +169,9 @@ rx_go.From([]int{1, 2, 3}...).Pipe(
     }))),
 ).Subscribe()
 ```
+19. **Finally** - do action before closing of observer(last value already emitted but observer not completed yet)
+```go
+rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Finally[int](func() {
+	done = true
+})).Subscribe()
+```
