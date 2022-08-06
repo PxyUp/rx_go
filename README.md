@@ -67,6 +67,14 @@ rx_go.Pairwise[int](rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
 ```go
 rx_go.Never
 ```
+14. **ForkJoin** - wait for Observables to complete and then combine last values they emitted; complete immediately if an empty array is passed.
+```go
+rx_go.ForkJoin(rx_go.From([]int{1, 2, 3}...), rx_go.From([]int{4, 5, 6}...), rx_go.From([]int{7, 8, 9}...)).Subscribe()
+```
+15. **Empty** - create new Observer which just completed
+```go
+rx_go.Empty
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function

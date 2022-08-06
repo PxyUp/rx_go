@@ -7,7 +7,16 @@ import (
 )
 
 var (
-	// Never -  which never emit
+	// Empty -  create new Observer which just completed
+	Empty = New(func() *Observer[any] {
+		o := NewObserver[any]()
+		go func() {
+			o.Complete()
+		}()
+		return o
+	}())
+
+	// Never -  create new Observer which never emit
 	Never = New(NewObserver[any]())
 )
 
@@ -99,6 +108,51 @@ func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Obse
 	return New(obs)
 }
 
+// ForkJoin - wait for Observables to complete and then combine last values they emitted; complete immediately if an empty array is passed.
+func ForkJoin[T any](obss ...*Observable[T]) *Observable[[]T] {
+	obs := NewObserver[[]T]()
+	resp := make([]T, len(obss))
+	clean := make(chan struct{})
+	cleanFns := make([]func(), len(obss))
+	obs.SetOnComplete(func() {
+		close(clean)
+		for _, v := range cleanFns {
+			v()
+		}
+	})
+
+	var wg sync.WaitGroup
+	for i, o := range obss {
+		wg.Add(1)
+		go func(index int, ob *Observable[T]) {
+			defer wg.Done()
+			ch, cancel := ob.Pipe(LastOne[T]()).Subscribe()
+			cleanFns[index] = cancel
+
+			for {
+				select {
+				case <-clean:
+					return
+				default:
+					value, ok := <-ch
+					if !ok {
+						return
+					}
+					resp[index] = value
+				}
+			}
+		}(i, o)
+	}
+
+	go func() {
+		wg.Wait()
+		obs.Next(resp)
+		obs.Complete()
+	}()
+
+	return New(obs)
+}
+
 // Pairwise - groups pairs of consecutive emissions together and emits them as an array of two values.
 func Pairwise[T any](o *Observable[T]) *Observable[[2]T] {
 	obs := NewObserver[[2]T]()
@@ -146,13 +200,13 @@ func Reduce[T any, Y any](o *Observable[T], mapper func(Y, T) Y, initValue Y) *O
 // MapTo create new observable with modified values
 func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	obs := NewObserver[Y]()
-
 	go func() {
 		defer obs.Complete()
 		ch, cancel := o.Subscribe()
 		obs.SetOnComplete(func() {
 			cancel()
 		})
+
 		for value := range ch {
 			obs.Next(mapper(value))
 		}
@@ -164,16 +218,23 @@ func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 // Merge merging multi observables with same type into single one
 func Merge[T any](obss ...*Observable[T]) *Observable[T] {
 	observer := NewObserver[T]()
-
 	cleanFns := make([]func(), len(obss))
 	clean := make(chan struct{})
+	observer.SetOnComplete(func() {
+		close(clean)
+		for _, v := range cleanFns {
+			v()
+		}
+	})
+
 	var wg sync.WaitGroup
-	for index, o := range obss {
+	for i, o := range obss {
 		wg.Add(1)
 		go func(index int, ob *Observable[T]) {
 			defer wg.Done()
 			ch, cancel := ob.Subscribe()
 			cleanFns[index] = cancel
+
 			for {
 				select {
 				case <-clean:
@@ -186,15 +247,8 @@ func Merge[T any](obss ...*Observable[T]) *Observable[T] {
 					observer.Next(value)
 				}
 			}
-		}(index, o)
+		}(i, o)
 	}
-
-	observer.SetOnComplete(func() {
-		close(clean)
-		for _, v := range cleanFns {
-			v()
-		}
-	})
 
 	go func() {
 		wg.Wait()

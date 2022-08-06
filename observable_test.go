@@ -8,6 +8,23 @@ import (
 	"time"
 )
 
+func TestEmpty(t *testing.T) {
+	ch, _ := rx_go.Empty.Subscribe()
+	_, ok := <-ch
+	assert.False(t, ok)
+}
+
+func TestForkJoin(t *testing.T) {
+	ch, _ := rx_go.ForkJoin(rx_go.MapTo(rx_go.NewInterval(time.Second, true), func(t time.Time) int {
+		return 1
+	}).Pipe(rx_go.Take[int](2)), rx_go.From([]int{4, 5, 6}...), rx_go.From([]int{7, 8, 9}...)).Subscribe()
+	var res [][]int
+	for v := range ch {
+		res = append(res, v)
+	}
+	assert.Equal(t, [][]int{{1, 6, 9}}, res)
+}
+
 func TestSwitch(t *testing.T) {
 	ch, _ := rx_go.Switch(rx_go.From([]int{1, 2, 3}...), func(value int) *rx_go.Observable[string] {
 		return rx_go.From(fmt.Sprintf("HELLO %d", value)).Pipe(rx_go.Repeat[string](2))

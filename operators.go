@@ -312,14 +312,15 @@ func Take[T any](count int) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
 		observer := NewObserver[T]()
 		go func() {
+			defer obs.Complete()
 			defer observer.Complete()
 			for value := range obs.list {
 				if count > 0 {
 					observer.Next(value)
 					count--
-					continue
-				} else {
-					return
+					if count == 0 {
+						return
+					}
 				}
 			}
 		}()
@@ -351,7 +352,9 @@ func FirstOne[T any]() Operator[T] {
 func LastOne[T any]() Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
 		observer := NewObserver[T]()
+
 		go func() {
+			defer observer.Complete()
 			var last *T
 			for value := range obs.list {
 				local := value
@@ -360,7 +363,6 @@ func LastOne[T any]() Operator[T] {
 			if last != nil {
 				observer.Next(*last)
 			}
-			observer.Complete()
 		}()
 		return observer
 	}

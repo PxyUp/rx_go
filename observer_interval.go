@@ -16,14 +16,14 @@ func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time
 	waiting := make(chan struct{})
 	subscribed := false
 
-	obs.onSubscribe = func() {
+	obs.SetOnSubscribe(func() {
 		if subscribed {
 			return
 		}
 
 		subscribed = true
 		close(waiting)
-	}
+	})
 
 	go func() {
 		defer obs.Complete()

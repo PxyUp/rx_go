@@ -18,6 +18,7 @@ func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 		copyOldOnSubscribeFn := old.onSubscribe
 
 		newObs := op(old)
+
 		copyNewOnCompleteFn := newObs.onComplete
 		copyNewOnSubscribeFn := newObs.onSubscribe
 
@@ -40,6 +41,10 @@ func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 func (o *Observable[T]) Subscribe() (chan T, func()) {
 	t := make(chan T)
 	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-ctx.Done()
+		o.observer.Complete()
+	}()
 
 	go func() {
 		if o.observer.onSubscribe != nil {
@@ -50,7 +55,6 @@ func (o *Observable[T]) Subscribe() (chan T, func()) {
 		for {
 			select {
 			case <-ctx.Done():
-				o.observer.Complete()
 				return
 			case value, ok := <-o.observer.list:
 				if !ok {

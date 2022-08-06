@@ -18,6 +18,7 @@ type Observer[T any] struct {
 // ArrayObserver create observer from array
 func ArrayObserver[T any](items ...T) *Observer[T] {
 	obs := NewObserver[T]()
+
 	go func() {
 		for _, j := range items {
 			obs.Next(j)
@@ -52,6 +53,12 @@ func (o *Observer[T]) SetOnComplete(fn func()) {
 	o.onComplete = fn
 }
 
+func (o *Observer[T]) SetOnNext(fn func(v T)) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	o.onNext = fn
+}
+
 func (o *Observer[T]) SetOnSubscribe(fn func()) {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
@@ -72,7 +79,6 @@ func (o *Observer[T]) Next(value T) {
 func (o *Observer[T]) Complete() {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
-
 	if o.completed {
 		return
 	}
