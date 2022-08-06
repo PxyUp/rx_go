@@ -259,6 +259,7 @@ func UntilCtx[T any](ctx context.Context) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {
 		observer := NewObserver[T]()
 		go func() {
+			defer obs.Complete()
 			defer observer.Complete()
 			for {
 				select {
