@@ -353,11 +353,13 @@ func LastOne[T any]() Operator[T] {
 		observer := NewObserver[T]()
 		go func() {
 			var last *T
+			isSet := false
 			for value := range obs.list {
 				local := value
 				last = &local
+				isSet = true
 			}
-			if last != nil {
+			if isSet {
 				observer.Next(*last)
 			}
 			observer.Complete()
