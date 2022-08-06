@@ -16,6 +16,24 @@ func TestFind(t *testing.T) {
 	assert.Equal(t, 3, <-ch)
 }
 
+func TestInitialDelay(t *testing.T) {
+	ch, _ := rx_go.Of[int](1).Pipe(rx_go.InitialDelay[int](time.Second)).Subscribe()
+	var res []int
+	start := time.Now()
+	waiter := make(chan struct{})
+	go func() {
+		defer close(waiter)
+		for v := range ch {
+			res = append(res, v)
+		}
+	}()
+	assert.Len(t, res, 0)
+	<-waiter
+	finish := time.Now()
+	assert.Len(t, res, 1)
+	assert.True(t, finish.Sub(start) >= time.Second && finish.Sub(start) <= time.Millisecond*1100)
+}
+
 func TestElementAt(t *testing.T) {
 	ch, _ := rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.ElementAt[int](1)).Subscribe()
 	assert.Equal(t, 2, <-ch)

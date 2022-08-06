@@ -328,6 +328,21 @@ func Take[T any](count int) Operator[T] {
 	}
 }
 
+// InitialDelay emit values with initial delay
+func InitialDelay[T any](delay time.Duration) Operator[T] {
+	return func(obs *Observer[T]) *Observer[T] {
+		observer := NewObserver[T]()
+		go func() {
+			time.Sleep(delay)
+			for v := range obs.list {
+				observer.Next(v)
+			}
+			observer.Complete()
+		}()
+		return observer
+	}
+}
+
 // Delay emit value with some delay in between
 func Delay[T any](delay time.Duration) Operator[T] {
 	return func(obs *Observer[T]) *Observer[T] {

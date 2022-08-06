@@ -193,3 +193,7 @@ rx_go.From([]int{1, 2, 3}...).Pipe(rx_go.Find(func(t int) bool {
 	return t == 3
 })).Subscribe()
 ```
+22. **InitialDelay** - emit values with initial delay
+```go
+rx_go.Of[int](1).Pipe(rx_go.InitialDelay[int](time.Second)).Subscribe()
+```
