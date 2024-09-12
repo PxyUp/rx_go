@@ -75,11 +75,16 @@ rx_go.ForkJoin(rx_go.From([]int{1, 2, 3}...), rx_go.From([]int{4, 5, 6}...), rx_
 ```go
 rx_go.Empty
 ```
+16. **BroadCast** - create new array of observable which value same input like parent
+```go
+rx_go.BroadCast(rx_go.New(rx_go.ArrayObserver(1,2,3,4)), 3)
+```
 
 # Methods
 1. **Subscribe** - create subscription channel and cancel function
 ```go
 ch, cancel := obs.Subscribe()
+//ch, cancel := obs.Subscribe(ctx)
 ```
 2. **Pipe** - function for accept operators
 

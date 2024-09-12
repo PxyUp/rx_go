@@ -38,9 +38,14 @@ func (o *Observable[T]) Pipe(operators ...Operator[T]) *Observable[T] {
 }
 
 // Subscribe - create channel for reading values and unsubscribe function
-func (o *Observable[T]) Subscribe() (chan T, func()) {
+func (o *Observable[T]) Subscribe(ctxs ...context.Context) (chan T, func()) {
+	lCtx := context.Background()
+	if len(ctxs) >= 1 {
+		lCtx = ctxs[0]
+	}
+
 	t := make(chan T)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(lCtx)
 	go func() {
 		<-ctx.Done()
 		o.observer.Complete()

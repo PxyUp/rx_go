@@ -26,7 +26,10 @@ func IntervalObserver(interval time.Duration, startNow bool) *Observer[time.Time
 	})
 
 	go func() {
-		defer obs.Complete()
+
+		defer func() {
+			obs.Complete()
+		}()
 		<-waiting
 
 		if startNow {

@@ -4,9 +4,30 @@ import (
 	"fmt"
 	"github.com/PxyUp/rx_go"
 	"github.com/stretchr/testify/assert"
+	"sync"
 	"testing"
 	"time"
 )
+
+func TestBroadCast(t *testing.T) {
+	size := 5
+	arrToSend := []int{1, 2, 3, 4, 5, 6}
+	arr := rx_go.BroadCast(rx_go.From(arrToSend...), size)
+	var wg sync.WaitGroup
+	wg.Add(size)
+	for i := 0; i < size; i++ {
+		go func(lIndex int) {
+			defer wg.Done()
+			var res []int
+			ch, _ := arr[lIndex].Subscribe()
+			for f := range ch {
+				res = append(res, f)
+			}
+			assert.Equal(t, arrToSend, res)
+		}(i)
+	}
+	wg.Wait()
+}
 
 func TestEmpty(t *testing.T) {
 	ch, _ := rx_go.Empty.Subscribe()

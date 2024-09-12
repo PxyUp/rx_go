@@ -60,9 +60,7 @@ func Concat[T any](o *Observable[T]) *Observable[[]T] {
 
 // From create new observable from static array
 func From[T any](array ...T) *Observable[T] {
-	return &Observable[T]{
-		observer: ArrayObserver(array...),
-	}
+	return New(ArrayObserver(array...))
 }
 
 // NewInterval return Observable from IntervalObserver observer
@@ -213,6 +211,47 @@ func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
 	}()
 
 	return New(obs)
+}
+
+// BroadCast splitting output from the observable to many outputs
+func BroadCast[T any](obs *Observable[T], size int) []*Observable[T] {
+	obss := make([]*Observable[T], size)
+	oo := make([]*Observer[T], size)
+	for i := 0; i < size; i++ {
+		oo[i] = NewObserver[T]()
+		obss[i] = New(oo[i])
+	}
+	go func() {
+		ch, cancel := obs.Subscribe()
+
+		defer func() {
+			for i := 0; i < size; i++ {
+				go func(lI int) {
+					oo[lI].Complete()
+				}(i)
+			}
+		}()
+
+		for i := 0; i < size; i++ {
+			oo[i].SetOnComplete(func() {
+				cancel()
+			})
+		}
+
+		for value := range ch {
+			var wg sync.WaitGroup
+			wg.Add(size)
+			for i := 0; i < size; i++ {
+				go func(lI int, lValue T) {
+					defer wg.Done()
+					oo[lI].Next(lValue)
+				}(i, value)
+			}
+			wg.Wait()
+		}
+	}()
+
+	return obss
 }
 
 // Merge merging multi observables with same type into single one
