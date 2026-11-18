@@ -1,298 +1,358 @@
 package rx_go
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 )
 
 var (
-	// Empty -  create new Observer which just completed
-	Empty = New(func() *Observer[any] {
-		o := NewObserver[any]()
-		go func() {
-			o.Complete()
-		}()
-		return o
-	}())
-
-	// Never -  create new Observer which never emit
-	Never = New(NewObserver[any]())
+	Empty = EmptyOf[any]()
+	Never = NeverOf[any]()
 )
 
-// New create new observable with predefined observer
+// New exposes an Observer as a hot multicast Observable.
 func New[T any](observer *Observer[T]) *Observable[T] {
-	return &Observable[T]{
-		observer: observer,
-	}
+	return create(func(ctx context.Context, dst *Observer[T]) func() { return observer.subscribe(ctx, dst) })
 }
 
-// FromChannel create new observable from readable channel
-func FromChannel[T any](ch <-chan T) *Observable[T] {
-	return New[T](ChannelObserver(ch))
+func EmptyOf[T any]() *Observable[T] {
+	return create(func(_ context.Context, dst *Observer[T]) func() { dst.Complete(); return nil })
 }
 
-// Of create static observable from one value
-func Of[T any](item T) *Observable[T] {
-	return New(StaticObserver(item))
+func NeverOf[T any]() *Observable[T] {
+	return create(func(_ context.Context, _ *Observer[T]) func() { return nil })
 }
 
-// Concat create static observable witch emit single array of all values
-func Concat[T any](o *Observable[T]) *Observable[[]T] {
-	obs := NewObserver[[]T]()
+func Throw[T any](err error) *Observable[T] {
+	return create(func(_ context.Context, dst *Observer[T]) func() { dst.Error(err); return nil })
+}
 
-	ch, cancel := o.Subscribe()
-	obs.SetOnComplete(func() {
-		cancel()
+func Defer[T any](factory func() *Observable[T]) *Observable[T] {
+	return create(func(ctx context.Context, dst *Observer[T]) func() {
+		o := factory()
+		if o == nil {
+			dst.Error(errors.New("rx_go: Defer factory returned nil"))
+			return nil
+		}
+		return o.subscribe(ctx, dst)
 	})
-
-	var res []T
-	go func() {
-		for v := range ch {
-			res = append(res, v)
-		}
-		obs.Next(res)
-		obs.Complete()
-	}()
-
-	return New(obs)
 }
 
-// From create new observable from static array
-func From[T any](array ...T) *Observable[T] {
-	return New(ArrayObserver(array...))
-}
-
-// NewInterval return Observable from IntervalObserver observer
-func NewInterval(duration time.Duration, startNow bool) *Observable[time.Time] {
-	return New[time.Time](IntervalObserver(duration, startNow))
-}
-
-// NewHttp - return Observable from HttpObserver
-func NewHttp(client *http.Client, req *http.Request) (*Observable[[]byte], error) {
-	obs, err := HttpObserver(client, req)
-	if err != nil {
-		return nil, err
-	}
-	return New[[]byte](obs), nil
-}
-
-// Switch change stream for each value
-func Switch[T any, Y any](o *Observable[T], mapper func(T) *Observable[Y]) *Observable[Y] {
-	obs := NewObserver[Y]()
-	var cancelFns []func()
-
-	obs.SetOnComplete(func() {
-		for _, fn := range cancelFns {
-			fn()
-		}
-	})
-
-	go func() {
-		topCh, cancelTop := o.Subscribe()
-		cancelFns = append(cancelFns, cancelTop)
-
-		for oldValue := range topCh {
-			localValue := oldValue
-			ch, cancel := mapper(localValue).Subscribe()
-			cancelFns = append(cancelFns, cancel)
-			for v := range ch {
-				obs.Next(v)
-			}
-		}
-
-		obs.Complete()
-	}()
-	return New(obs)
-}
-
-// ForkJoin - wait for Observables to complete and then combine last values they emitted; complete immediately if an empty array is passed.
-func ForkJoin[T any](obss ...*Observable[T]) *Observable[[]T] {
-	obs := NewObserver[[]T]()
-	resp := make([]T, len(obss))
-	clean := make(chan struct{})
-	cleanFns := make([]func(), len(obss))
-	obs.SetOnComplete(func() {
-		close(clean)
-		for _, v := range cleanFns {
-			v()
-		}
-	})
-
-	var wg sync.WaitGroup
-	for i, o := range obss {
-		wg.Add(1)
-		go func(index int, ob *Observable[T]) {
-			defer wg.Done()
-			ch, cancel := ob.Pipe(LastOne[T]()).Subscribe()
-			cleanFns[index] = cancel
-
-			for {
+func From[T any](items ...T) *Observable[T] {
+	copyItems := append([]T(nil), items...)
+	return create(func(ctx context.Context, dst *Observer[T]) func() {
+		go func() {
+			for _, item := range copyItems {
 				select {
-				case <-clean:
+				case <-ctx.Done():
 					return
 				default:
-					value, ok := <-ch
-					if !ok {
-						return
-					}
-					resp[index] = value
+					dst.Next(item)
 				}
 			}
-		}(i, o)
-	}
-
-	go func() {
-		wg.Wait()
-		obs.Next(resp)
-		obs.Complete()
-	}()
-
-	return New(obs)
+			dst.Complete()
+		}()
+		return nil
+	})
 }
 
-// Pairwise - groups pairs of consecutive emissions together and emits them as an array of two values.
-func Pairwise[T any](o *Observable[T]) *Observable[[2]T] {
-	obs := NewObserver[[2]T]()
+func Of[T any](item T) *Observable[T] { return From(item) }
 
-	go func() {
-		defer obs.Complete()
-		ch, cancel := o.Subscribe()
-		obs.SetOnComplete(func() {
-			cancel()
-		})
-
-		var prev *T
-		for value := range ch {
-			local := value
-			if prev != nil {
-				obs.Next([2]T{*prev, local})
-			}
-			prev = &local
-		}
-	}()
-
-	return New(obs)
-}
-
-// Reduce - create new observable which return accumulation value from all previous emitted items
-func Reduce[T any, Y any](o *Observable[T], mapper func(Y, T) Y, initValue Y) *Observable[Y] {
-	obs := NewObserver[Y]()
-
-	go func() {
-		defer obs.Complete()
-		ch, cancel := o.Subscribe()
-		obs.SetOnComplete(func() {
-			cancel()
-		})
-		iValue := initValue
-		for value := range ch {
-			iValue = mapper(iValue, value)
-			obs.Next(iValue)
-		}
-	}()
-
-	return New(obs)
-}
-
-// MapTo create new observable with modified values
-func MapTo[T any, Y any](o *Observable[T], mapper func(T) Y) *Observable[Y] {
-	obs := NewObserver[Y]()
-	go func() {
-		defer obs.Complete()
-		ch, cancel := o.Subscribe()
-		obs.SetOnComplete(func() {
-			cancel()
-		})
-
-		for value := range ch {
-			obs.Next(mapper(value))
-		}
-	}()
-
-	return New(obs)
-}
-
-// BroadCast splitting output from the observable to many outputs
-func BroadCast[T any](obs *Observable[T], size int) []*Observable[T] {
-	obss := make([]*Observable[T], size)
-	oo := make([]*Observer[T], size)
-	for i := 0; i < size; i++ {
-		oo[i] = NewObserver[T]()
-		obss[i] = New(oo[i])
-	}
-	go func() {
-		ch, cancel := obs.Subscribe()
-
-		defer func() {
-			for i := 0; i < size; i++ {
-				go func(lI int) {
-					oo[lI].Complete()
-				}(i)
+func FromChannel[T any](input <-chan T) *Observable[T] {
+	return create(func(ctx context.Context, dst *Observer[T]) func() {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case value, ok := <-input:
+					if !ok {
+						dst.Complete()
+						return
+					}
+					dst.Next(value)
+				}
 			}
 		}()
-
-		for i := 0; i < size; i++ {
-			oo[i].SetOnComplete(func() {
-				cancel()
-			})
-		}
-
-		for value := range ch {
-			var wg sync.WaitGroup
-			wg.Add(size)
-			for i := 0; i < size; i++ {
-				go func(lI int, lValue T) {
-					defer wg.Done()
-					oo[lI].Next(lValue)
-				}(i, value)
-			}
-			wg.Wait()
-		}
-	}()
-
-	return obss
+		return nil
+	})
 }
 
-// Merge merging multi observables with same type into single one
-func Merge[T any](obss ...*Observable[T]) *Observable[T] {
-	observer := NewObserver[T]()
-	cleanFns := make([]func(), len(obss))
-	clean := make(chan struct{})
-	observer.SetOnComplete(func() {
-		close(clean)
-		for _, v := range cleanFns {
-			v()
+func NewInterval(period time.Duration, startNow bool) *Observable[time.Time] {
+	return create(func(ctx context.Context, dst *Observer[time.Time]) func() {
+		if period <= 0 {
+			dst.Error(errors.New("rx_go: interval must be positive"))
+			return nil
 		}
-	})
-
-	var wg sync.WaitGroup
-	for i, o := range obss {
-		wg.Add(1)
-		go func(index int, ob *Observable[T]) {
-			defer wg.Done()
-			ch, cancel := ob.Subscribe()
-			cleanFns[index] = cancel
-
+		ticker := time.NewTicker(period)
+		go func() {
+			defer ticker.Stop()
+			if startNow {
+				dst.Next(time.Now())
+			}
 			for {
 				select {
-				case <-clean:
+				case <-ctx.Done():
 					return
-				default:
-					value, ok := <-ch
-					if !ok {
-						return
-					}
-					observer.Next(value)
+				case value := <-ticker.C:
+					dst.Next(value)
 				}
 			}
-		}(i, o)
+		}()
+		return ticker.Stop
+	})
+}
+
+func Timer(delay time.Duration) *Observable[time.Time] {
+	return create(func(ctx context.Context, dst *Observer[time.Time]) func() {
+		t := time.NewTimer(delay)
+		go func() {
+			defer t.Stop()
+			select {
+			case <-ctx.Done():
+				return
+			case value := <-t.C:
+				dst.Next(value)
+				dst.Complete()
+			}
+		}()
+		return func() { t.Stop() }
+	})
+}
+
+// NewHttp performs the request lazily for every subscription.
+func NewHttp(client *http.Client, req *http.Request) (*Observable[[]byte], error) {
+	if req == nil {
+		return nil, errors.New("rx_go: nil HTTP request")
 	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return create(func(ctx context.Context, dst *Observer[[]byte]) func() {
+		request := req.Clone(ctx)
+		go func() {
+			resp, err := client.Do(request)
+			if err != nil {
+				dst.Error(err)
+				return
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				dst.Error(err)
+				return
+			}
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				dst.Error(&HTTPError{StatusCode: resp.StatusCode, Body: body})
+				return
+			}
+			dst.Next(body)
+			dst.Complete()
+		}()
+		return nil
+	}), nil
+}
 
-	go func() {
-		wg.Wait()
-		observer.Complete()
-	}()
+type HTTPError struct {
+	StatusCode int
+	Body       []byte
+}
 
-	return New(observer)
+func (e *HTTPError) Error() string { return http.StatusText(e.StatusCode) }
+
+func MapTo[T, R any](source *Observable[T], mapper func(T) R) *Observable[R] {
+	return create(func(ctx context.Context, dst *Observer[R]) func() {
+		return source.subscribe(ctx, newSink(func(v T) { dst.Next(mapper(v)) }, dst.Error, dst.Complete))
+	})
+}
+
+// Reduce emits the final accumulator once when the source completes.
+func Reduce[T, R any](source *Observable[T], reducer func(R, T) R, seed R) *Observable[R] {
+	return create(func(ctx context.Context, dst *Observer[R]) func() {
+		acc := seed
+		return source.subscribe(ctx, newSink(func(v T) { acc = reducer(acc, v) }, dst.Error, func() { dst.Next(acc); dst.Complete() }))
+	})
+}
+
+func ScanTo[T, R any](source *Observable[T], reducer func(R, T) R, seed R) *Observable[R] {
+	return create(func(ctx context.Context, dst *Observer[R]) func() {
+		acc := seed
+		return source.subscribe(ctx, newSink(func(v T) { acc = reducer(acc, v); dst.Next(acc) }, dst.Error, dst.Complete))
+	})
+}
+
+func Pairwise[T any](source *Observable[T]) *Observable[[2]T] {
+	return create(func(ctx context.Context, dst *Observer[[2]T]) func() {
+		var previous T
+		hasPrevious := false
+		return source.subscribe(ctx, newSink(func(v T) {
+			if hasPrevious {
+				dst.Next([2]T{previous, v})
+			}
+			previous, hasPrevious = v, true
+		}, dst.Error, dst.Complete))
+	})
+}
+
+func Merge[T any](sources ...*Observable[T]) *Observable[T] {
+	return create(func(ctx context.Context, dst *Observer[T]) func() {
+		ctx, cancel := context.WithCancel(ctx)
+		if len(sources) == 0 {
+			dst.Complete()
+			return cancel
+		}
+		var wg sync.WaitGroup
+		var once sync.Once
+		for _, source := range sources {
+			if source == nil {
+				once.Do(func() { dst.Error(errors.New("rx_go: nil source")); cancel() })
+				continue
+			}
+			wg.Add(1)
+			source.subscribe(ctx, newSink(dst.Next, func(err error) { once.Do(func() { dst.Error(err); cancel() }) }, wg.Done))
+		}
+		go func() {
+			wg.Wait()
+			select {
+			case <-ctx.Done():
+			default:
+				dst.Complete()
+			}
+		}()
+		return cancel
+	})
+}
+
+// Concat subscribes to each source in order.
+func Concat[T any](sources ...*Observable[T]) *Observable[T] {
+	return create(func(ctx context.Context, dst *Observer[T]) func() {
+		ctx, cancel := context.WithCancel(ctx)
+		go func() {
+			for _, source := range sources {
+				done := make(chan struct{})
+				var once sync.Once
+				source.subscribe(ctx, newSink(dst.Next, func(err error) { once.Do(func() { dst.Error(err); cancel(); close(done) }) }, func() { once.Do(func() { close(done) }) }))
+				select {
+				case <-ctx.Done():
+					return
+				case <-done:
+				}
+			}
+			dst.Complete()
+		}()
+		return cancel
+	})
+}
+
+func ToSlice[T any](source *Observable[T]) *Observable[[]T] {
+	return create(func(ctx context.Context, dst *Observer[[]T]) func() {
+		values := make([]T, 0)
+		return source.subscribe(ctx, newSink(func(v T) { values = append(values, v) }, dst.Error, func() { dst.Next(values); dst.Complete() }))
+	})
+}
+
+func Switch[T, R any](source *Observable[T], mapper func(T) *Observable[R]) *Observable[R] {
+	return create(func(ctx context.Context, dst *Observer[R]) func() {
+		ctx, cancel := context.WithCancel(ctx)
+		var mu sync.Mutex
+		var innerCancel func()
+		outerDone := false
+		generation := uint64(0)
+		finishIfDone := func() {
+			mu.Lock()
+			done := outerDone && innerCancel == nil
+			mu.Unlock()
+			if done {
+				dst.Complete()
+			}
+		}
+		outerCancel := source.subscribe(ctx, newSink(func(v T) {
+			mu.Lock()
+			generation++
+			current := generation
+			if innerCancel != nil {
+				innerCancel()
+			}
+			innerCtx, stop := context.WithCancel(ctx)
+			innerCancel = stop
+			mu.Unlock()
+			inner := mapper(v)
+			if inner == nil {
+				dst.Error(errors.New("rx_go: Switch mapper returned nil"))
+				cancel()
+				return
+			}
+			inner.subscribe(innerCtx, newSink(dst.Next, func(err error) { dst.Error(err); cancel() }, func() {
+				mu.Lock()
+				if generation == current {
+					innerCancel = nil
+				}
+				mu.Unlock()
+				finishIfDone()
+			}))
+		}, func(err error) { dst.Error(err); cancel() }, func() { mu.Lock(); outerDone = true; mu.Unlock(); finishIfDone() }))
+		return func() {
+			if outerCancel != nil {
+				outerCancel()
+			}
+			mu.Lock()
+			if innerCancel != nil {
+				innerCancel()
+			}
+			mu.Unlock()
+			cancel()
+		}
+	})
+}
+
+func ForkJoin[T any](sources ...*Observable[T]) *Observable[[]T] {
+	return create(func(ctx context.Context, dst *Observer[[]T]) func() {
+		ctx, cancel := context.WithCancel(ctx)
+		if len(sources) == 0 {
+			dst.Complete()
+			return cancel
+		}
+		values := make([]T, len(sources))
+		seen := make([]bool, len(sources))
+		var wg sync.WaitGroup
+		var once sync.Once
+		for i, source := range sources {
+			wg.Add(1)
+			index := i
+			source.subscribe(ctx, newSink(func(v T) { values[index] = v; seen[index] = true }, func(err error) { once.Do(func() { dst.Error(err); cancel() }); wg.Done() }, wg.Done))
+		}
+		go func() {
+			wg.Wait()
+			if ctx.Err() != nil {
+				return
+			}
+			for _, ok := range seen {
+				if !ok {
+					dst.Complete()
+					return
+				}
+			}
+			dst.Next(values)
+			dst.Complete()
+		}()
+		return cancel
+	})
+}
+
+// BroadCast is retained for compatibility. Prefer Share or an explicit Subject.
+func BroadCast[T any](source *Observable[T], size int) []*Observable[T] {
+	if size <= 0 {
+		return nil
+	}
+	outputs := make([]*Observable[T], size)
+	// Each branch is independently subscribable and receives the full sequence.
+	// Use Share when a single upstream execution is required.
+	for i := range outputs {
+		outputs[i] = source
+	}
+	return outputs
 }

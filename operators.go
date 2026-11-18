@@ -2,414 +2,480 @@ package rx_go
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
 
-// Find - only the first value emitted by the source Observable that meets some condition.
-func Find[T any](fn func(T) bool) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			emitted := false
-			for val := range obs.list {
-				local := val
-				if fn(local) && !emitted {
-					emitted = true
-					observer.Next(local)
-				}
-			}
-
-		}()
-		return observer
-	}
-}
-
-// ElementAt - emit single value from observable which contains element on this position
-func ElementAt[T any](index uint32) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			i := 0
-			for val := range obs.list {
-				if i == int(index) {
-					observer.Next(val)
-				}
-				i++
-			}
-
-		}()
-		return observer
-	}
-}
-
-// Finally - do action before closing of observer(last value already emitted but observer not completed yet)
-func Finally[T any](fn func()) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			defer fn()
-			for val := range obs.list {
-				observer.Next(val)
-			}
-
-		}()
-		return observer
-	}
-}
-
-// EndWith - end emitting with predefined value
-func EndWith[T any](value T) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			defer observer.Next(value)
-			for val := range obs.list {
-				observer.Next(val)
-			}
-
-		}()
-		return observer
-	}
-}
-
-// StartWith - start emitting with predefined value
-func StartWith[T any](value T) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			observer.Next(value)
-			for val := range obs.list {
-				observer.Next(val)
-			}
-
-		}()
-		return observer
-	}
-}
-
-// Repeat emit value multiple times
-func Repeat[T any](times uint32) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			for value := range obs.list {
-				local := value
-				count := times
-				for count > 0 {
-					observer.Next(local)
-					count--
-				}
-			}
-
-		}()
-		return observer
-	}
-}
-
-// Debounce emit value if in provided amount of time new value was not emitted
-func Debounce[T any](duration time.Duration) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			var wg sync.WaitGroup
-			defer func() {
-				wg.Wait()
-				observer.Complete()
-			}()
-			var timer *time.Timer
-			for value := range obs.list {
-				local := value
-				if timer != nil {
-					wg.Done()
-					timer.Stop()
-				}
-				wg.Add(1)
-				timer = time.AfterFunc(duration, func() {
-					wg.Done()
-					observer.Next(local)
-					timer = nil
-				})
-			}
-		}()
-		return observer
-	}
-}
-
-// Do execute some action on the emitting value
-func Do[T any](fn func(value T)) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			observer.onNext = fn
-			for value := range obs.list {
-				observer.Next(value)
-			}
-		}()
-		return observer
-	}
-}
-
-// SkipUntilCtx - skips items emitted by the Observable until a ctx not done
-func SkipUntilCtx[T any](ctx context.Context) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-
-			for {
-				value, ok := <-obs.list
-				if !ok {
-					return
-				}
-				select {
-				case <-ctx.Done():
-					observer.Next(value)
-				default:
-
-				}
-			}
-		}()
-		return observer
-	}
-}
-
-// SkipUntil - skips items emitted by the Observable until a second Observable emits an item(at least one).
-func SkipUntil[T any, Y any](o *Observable[Y]) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			ch, cancel := o.Subscribe()
-
-			observer.SetOnComplete(func() {
-				cancel()
-			})
-
-			emitted := make(chan struct{})
-
-			go func() {
-				<-ch
-				close(emitted)
-			}()
-
-			for {
-				value, ok := <-obs.list
-				if !ok {
-					return
-				}
-				select {
-				case <-emitted:
-					observer.Next(value)
-				default:
-
-				}
-			}
-		}()
-		return observer
-	}
-}
-
-// Skip - that skips the first count items emitted
-func Skip[T any](count uint32) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			for v := range obs.list {
-				if count > 0 {
-					count--
-					continue
-				}
-				observer.Next(v)
-			}
-		}()
-		return observer
-	}
-}
-
-// AfterCtx - emit value after ctx is done(values not ignored, they are not emitted)
-func AfterCtx[T any](ctx context.Context) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer observer.Complete()
-			for {
-				value, ok := <-obs.list
-				if !ok {
-					return
-				}
-				<-ctx.Done()
-				observer.Next(value)
-			}
-		}()
-		return observer
-	}
-}
-
-// UntilCtx - emit value until context not done, if ctx is done value will not emit
-func UntilCtx[T any](ctx context.Context) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer obs.Complete()
-			defer observer.Complete()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case value, ok := <-obs.list:
-					if !ok {
-						return
-					}
-					observer.Next(value)
-				}
-			}
-		}()
-		return observer
-	}
-}
-
-// DistinctWith compare prev value and next with comparator and emit if they not equal
-func DistinctWith[T any](comp func(T, T) bool) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			var prev *T
-			for value := range obs.list {
-				local := value
-				if prev == nil {
-					prev = &local
-					observer.Next(local)
+func lift[T any](next func(T, *Observer[T]), complete func(*Observer[T])) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			return source.subscribe(ctx, newSink(func(v T) { next(v, dst) }, dst.Error, func() {
+				if complete != nil {
+					complete(dst)
 				} else {
-					if !comp(*prev, local) {
-						prev = &local
-						observer.Next(local)
-					}
+					dst.Complete()
 				}
-			}
-			observer.Complete()
-		}()
-		return observer
+			}))
+		})
 	}
 }
 
-// Distinct compare prev value with next value and emit if they not same
-func Distinct[T comparable]() Operator[T] {
-	return DistinctWith(func(a T, b T) bool {
-		return a == b
-	})
+func Map[T any](mapper func(T) T) Operator[T] {
+	return lift(func(v T, dst *Observer[T]) { dst.Next(mapper(v)) }, nil)
+}
+func Filter[T any](predicate func(T) bool) Operator[T] {
+	return lift(func(v T, dst *Observer[T]) {
+		if predicate(v) {
+			dst.Next(v)
+		}
+	}, nil)
+}
+func Do[T any](action func(T)) Operator[T] {
+	return lift(func(v T, dst *Observer[T]) { action(v); dst.Next(v) }, nil)
+}
+func StartWith[T any](values ...T) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] { return Concat(From(values...), source) }
+}
+func EndWith[T any](values ...T) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] { return Concat(source, From(values...)) }
 }
 
-// Take return first N elements from the begining
+func Skip[T any](count uint32) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			remaining := count
+			return source.subscribe(ctx, newSink(func(v T) {
+				if remaining > 0 {
+					remaining--
+					return
+				}
+				dst.Next(v)
+			}, dst.Error, dst.Complete))
+		})
+	}
+}
+
 func Take[T any](count int) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			defer obs.Complete()
-			defer observer.Complete()
-			for value := range obs.list {
-				if count > 0 {
-					observer.Next(value)
-					count--
-					if count == 0 {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			if count <= 0 {
+				dst.Complete()
+				return nil
+			}
+			innerCtx, cancel := context.WithCancel(ctx)
+			remaining := count
+			teardown := source.subscribe(innerCtx, newSink(func(v T) {
+				if remaining <= 0 {
+					return
+				}
+				remaining--
+				dst.Next(v)
+				if remaining == 0 {
+					dst.Complete()
+					cancel()
+				}
+			}, dst.Error, dst.Complete))
+			return func() {
+				cancel()
+				if teardown != nil {
+					teardown()
+				}
+			}
+		})
+	}
+}
+
+func FirstOne[T any]() Operator[T] { return Take[T](1) }
+
+func LastOne[T any]() Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			var value T
+			found := false
+			return source.subscribe(ctx, newSink(func(v T) { value, found = v, true }, dst.Error, func() {
+				if found {
+					dst.Next(value)
+				}
+				dst.Complete()
+			}))
+		})
+	}
+}
+
+func Find[T any](predicate func(T) bool) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			innerCtx, cancel := context.WithCancel(ctx)
+			found := false
+			teardown := source.subscribe(innerCtx, newSink(func(v T) {
+				if !found && predicate(v) {
+					found = true
+					dst.Next(v)
+					dst.Complete()
+					cancel()
+				}
+			}, dst.Error, func() {
+				if !found {
+					dst.Complete()
+				}
+			}))
+			return func() {
+				cancel()
+				if teardown != nil {
+					teardown()
+				}
+			}
+		})
+	}
+}
+
+func ElementAt[T any](index uint32) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			innerCtx, cancel := context.WithCancel(ctx)
+			current := uint32(0)
+			found := false
+			teardown := source.subscribe(innerCtx, newSink(func(v T) {
+				if current == index {
+					found = true
+					dst.Next(v)
+					dst.Complete()
+					cancel()
+				}
+				current++
+			}, dst.Error, func() {
+				if !found {
+					dst.Error(errors.New("rx_go: element index out of range"))
+				}
+			}))
+			return func() {
+				cancel()
+				if teardown != nil {
+					teardown()
+				}
+			}
+		})
+	}
+}
+
+func Distinct[T comparable]() Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			seen := make(map[T]struct{})
+			return source.subscribe(ctx, newSink(func(v T) {
+				if _, ok := seen[v]; !ok {
+					seen[v] = struct{}{}
+					dst.Next(v)
+				}
+			}, dst.Error, dst.Complete))
+		})
+	}
+}
+
+func DistinctWith[T any](equal func(T, T) bool) Operator[T] { return DistinctUntilChangedWith(equal) }
+func DistinctUntilChanged[T comparable]() Operator[T] {
+	return DistinctUntilChangedWith(func(a, b T) bool { return a == b })
+}
+func DistinctUntilChangedWith[T any](equal func(T, T) bool) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			var previous T
+			hasPrevious := false
+			return source.subscribe(ctx, newSink(func(v T) {
+				if !hasPrevious || !equal(previous, v) {
+					previous, hasPrevious = v, true
+					dst.Next(v)
+				}
+			}, dst.Error, dst.Complete))
+		})
+	}
+}
+
+// Scan emits every intermediate accumulator (with the element type as state).
+func Scan[T any](reducer func(T, T) T, seed T) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			acc := seed
+			return source.subscribe(ctx, newSink(func(v T) { acc = reducer(acc, v); dst.Next(acc) }, dst.Error, dst.Complete))
+		})
+	}
+}
+
+// Repeat resubscribes to the complete source sequence. times=0 completes empty.
+func Repeat[T any](times uint32) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			ctx, cancel := context.WithCancel(ctx)
+			go func() {
+				for i := uint32(0); i < times; i++ {
+					done := make(chan struct{})
+					var once sync.Once
+					source.subscribe(ctx, newSink(dst.Next, func(err error) { once.Do(func() { dst.Error(err); cancel(); close(done) }) }, func() { once.Do(func() { close(done) }) }))
+					select {
+					case <-ctx.Done():
 						return
+					case <-done:
 					}
 				}
-			}
-		}()
-		return observer
+				dst.Complete()
+			}()
+			return cancel
+		})
 	}
 }
 
-// InitialDelay emit values with initial delay
-func InitialDelay[T any](delay time.Duration) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			time.Sleep(delay)
-			for v := range obs.list {
-				observer.Next(v)
-			}
-			observer.Complete()
-		}()
-		return observer
-	}
-}
-
-// Delay emit value with some delay in between
 func Delay[T any](delay time.Duration) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			for v := range obs.list {
-				time.Sleep(delay)
-				observer.Next(v)
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			type event struct {
+				value    T
+				err      error
+				complete bool
+				at       time.Time
 			}
-			observer.Complete()
-		}()
-		return observer
-	}
-}
-
-// FirstOne return first emitted element from observable
-func FirstOne[T any]() Operator[T] {
-	return Take[T](1)
-}
-
-// LastOne return last element from observable
-func LastOne[T any]() Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-
-		go func() {
-			defer observer.Complete()
-			var last *T
-			for value := range obs.list {
-				local := value
-				last = &local
-			}
-			if last != nil {
-				observer.Next(*last)
-			}
-		}()
-		return observer
-	}
-}
-
-// Filter elements from the observable
-func Filter[T any](flt func(value T) bool) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			for value := range obs.list {
-				if flt(value) {
-					observer.Next(value)
+			events := make(chan event)
+			go func() {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case e := <-events:
+						t := time.NewTimer(time.Until(e.at))
+						select {
+						case <-ctx.Done():
+							t.Stop()
+							return
+						case <-t.C:
+						}
+						if e.err != nil {
+							dst.Error(e.err)
+							return
+						}
+						if e.complete {
+							dst.Complete()
+							return
+						}
+						dst.Next(e.value)
+					}
+				}
+			}()
+			emit := func(e event) {
+				e.at = time.Now().Add(delay)
+				select {
+				case events <- e:
+				case <-ctx.Done():
 				}
 			}
-			observer.Complete()
-		}()
-		return observer
+			return source.subscribe(ctx, newSink(func(v T) { emit(event{value: v}) }, func(err error) { emit(event{err: err}) }, func() { emit(event{complete: true}) }))
+		})
 	}
 }
 
-// Map static mapping from observable
-func Map[T any](mapper func(value T) T) Operator[T] {
-	return func(obs *Observer[T]) *Observer[T] {
-		observer := NewObserver[T]()
-		go func() {
-			for value := range obs.list {
-				observer.Next(mapper(value))
+func InitialDelay[T any](delay time.Duration) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			ctx, cancel := context.WithCancel(ctx)
+			var mu sync.Mutex
+			var teardown func()
+			t := time.AfterFunc(delay, func() { mu.Lock(); teardown = source.subscribe(ctx, dst); mu.Unlock() })
+			return func() {
+				t.Stop()
+				cancel()
+				mu.Lock()
+				defer mu.Unlock()
+				if teardown != nil {
+					teardown()
+				}
 			}
-			observer.Complete()
-		}()
-		return observer
+		})
+	}
+}
+
+func Debounce[T any](duration time.Duration) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			type event struct {
+				value    T
+				err      error
+				complete bool
+			}
+			events := make(chan event)
+			go func() {
+				var timer *time.Timer
+				var timerC <-chan time.Time
+				var latest T
+				pending := false
+				upstreamDone := false
+				for {
+					select {
+					case <-ctx.Done():
+						if timer != nil {
+							timer.Stop()
+						}
+						return
+					case e := <-events:
+						if e.err != nil {
+							dst.Error(e.err)
+							return
+						}
+						if e.complete {
+							upstreamDone = true
+							if !pending {
+								dst.Complete()
+								return
+							}
+							continue
+						}
+						latest, pending = e.value, true
+						if timer == nil {
+							timer = time.NewTimer(duration)
+						} else {
+							if !timer.Stop() {
+								select {
+								case <-timer.C:
+								default:
+								}
+							}
+							timer.Reset(duration)
+						}
+						timerC = timer.C
+					case <-timerC:
+						if pending {
+							dst.Next(latest)
+							pending = false
+						}
+						timerC = nil
+						if upstreamDone {
+							dst.Complete()
+							return
+						}
+					}
+				}
+			}()
+			emit := func(e event) {
+				select {
+				case events <- e:
+				case <-ctx.Done():
+				}
+			}
+			return source.subscribe(ctx, newSink(func(v T) { emit(event{value: v}) }, func(err error) { emit(event{err: err}) }, func() { emit(event{complete: true}) }))
+		})
+	}
+}
+
+// Throttle emits the first value in each duration window.
+func Throttle[T any](duration time.Duration) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			var mu sync.Mutex
+			open := true
+			return source.subscribe(ctx, newSink(func(v T) {
+				mu.Lock()
+				if !open {
+					mu.Unlock()
+					return
+				}
+				open = false
+				mu.Unlock()
+				dst.Next(v)
+				time.AfterFunc(duration, func() { mu.Lock(); open = true; mu.Unlock() })
+			}, dst.Error, dst.Complete))
+		})
+	}
+}
+
+func Finally[T any](action func()) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			var once sync.Once
+			run := func() { once.Do(action) }
+			teardown := source.subscribe(ctx, newSink(dst.Next, func(err error) { run(); dst.Error(err) }, func() { run(); dst.Complete() }))
+			return func() {
+				if teardown != nil {
+					teardown()
+				}
+				run()
+			}
+		})
+	}
+}
+
+func UntilCtx[T any](until context.Context) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			ctx, cancel := context.WithCancel(ctx)
+			go func() {
+				select {
+				case <-until.Done():
+					dst.Complete()
+					cancel()
+				case <-ctx.Done():
+				}
+			}()
+			teardown := source.subscribe(ctx, dst)
+			return func() {
+				cancel()
+				if teardown != nil {
+					teardown()
+				}
+			}
+		})
+	}
+}
+
+func AfterCtx[T any](after context.Context) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			ctx, cancel := context.WithCancel(ctx)
+			go func() {
+				select {
+				case <-ctx.Done():
+					return
+				case <-after.Done():
+					source.subscribe(ctx, dst)
+				}
+			}()
+			return cancel
+		})
+	}
+}
+
+func SkipUntilCtx[T any](until context.Context) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			return source.subscribe(ctx, newSink(func(v T) {
+				select {
+				case <-until.Done():
+					dst.Next(v)
+				default:
+				}
+			}, dst.Error, dst.Complete))
+		})
+	}
+}
+
+func SkipUntil[T, U any](trigger *Observable[U]) Operator[T] {
+	return func(source *Observable[T]) *Observable[T] {
+		return create(func(ctx context.Context, dst *Observer[T]) func() {
+			ctx, cancel := context.WithCancel(ctx)
+			var mu sync.RWMutex
+			open := false
+			trigger.subscribe(ctx, newSink(func(U) { mu.Lock(); open = true; mu.Unlock() }, dst.Error, func() {}))
+			teardown := source.subscribe(ctx, newSink(func(v T) {
+				mu.RLock()
+				pass := open
+				mu.RUnlock()
+				if pass {
+					dst.Next(v)
+				}
+			}, dst.Error, dst.Complete))
+			return func() {
+				cancel()
+				if teardown != nil {
+					teardown()
+				}
+			}
+		})
 	}
 }

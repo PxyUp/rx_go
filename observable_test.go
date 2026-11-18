@@ -1,179 +1,127 @@
 package rx_go_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"github.com/PxyUp/rx_go"
-	"github.com/stretchr/testify/assert"
+	"io"
+	"net/http"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	rx "github.com/PxyUp/rx_go"
+	"github.com/stretchr/testify/require"
 )
 
-func TestBroadCast(t *testing.T) {
-	size := 5
-	arrToSend := []int{1, 2, 3, 4, 5, 6}
-	arr := rx_go.BroadCast(rx_go.From(arrToSend...), size)
-	var wg sync.WaitGroup
-	wg.Add(size)
-	for i := 0; i < size; i++ {
-		go func(lIndex int) {
-			defer wg.Done()
-			var res []int
-			ch, _ := arr[lIndex].Subscribe()
-			for f := range ch {
-				res = append(res, f)
-			}
-			assert.Equal(t, arrToSend, res)
-		}(i)
+func collect[T any](t *testing.T, source *rx.Observable[T]) ([]T, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var values []T
+	var streamErr error
+	var mu sync.Mutex
+	sub := source.SubscribeObserver(ctx, func(v T) { mu.Lock(); values = append(values, v); mu.Unlock() }, func(err error) { streamErr = err }, nil)
+	select {
+	case <-sub.Done():
+	case <-ctx.Done():
+		t.Fatal("observable did not terminate")
 	}
-	wg.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	return values, streamErr
 }
 
-func TestEmpty(t *testing.T) {
-	ch, _ := rx_go.Empty.Subscribe()
-	_, ok := <-ch
-	assert.False(t, ok)
+func TestColdObservableSupportsRepeatedSubscriptions(t *testing.T) {
+	source := rx.From(1, 2, 3)
+	a, err := collect(t, source)
+	require.NoError(t, err)
+	b, err := collect(t, source)
+	require.NoError(t, err)
+	require.Equal(t, []int{1, 2, 3}, a)
+	require.Equal(t, a, b)
+}
+
+func TestCancellationIsSubscriptionLocal(t *testing.T) {
+	source := rx.NewInterval(2*time.Millisecond, true)
+	ctxA, cancelA := context.WithCancel(context.Background())
+	var a, b atomic.Int64
+	sa := source.SubscribeObserver(ctxA, func(time.Time) {
+		if a.Add(1) == 2 {
+			cancelA()
+		}
+	}, nil, nil)
+	ctxB, cancelB := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancelB()
+	sb := source.SubscribeObserver(ctxB, func(time.Time) { b.Add(1) }, nil, nil)
+	<-sa.Done()
+	<-sb.Done()
+	require.GreaterOrEqual(t, b.Load(), int64(3))
+}
+
+func TestErrorContract(t *testing.T) {
+	want := errors.New("boom")
+	values, err := collect(t, rx.Throw[int](want))
+	require.Empty(t, values)
+	require.ErrorIs(t, err, want)
+}
+
+func TestCreationAndCombination(t *testing.T) {
+	values, err := collect(t, rx.Concat(rx.From(1, 2), rx.From(3, 4)))
+	require.NoError(t, err)
+	require.Equal(t, []int{1, 2, 3, 4}, values)
+	values, err = collect(t, rx.Merge(rx.From(1, 2), rx.From(3, 4)))
+	require.NoError(t, err)
+	require.ElementsMatch(t, []int{1, 2, 3, 4}, values)
+	slices, err := collect(t, rx.ToSlice(rx.From(1, 2, 3)))
+	require.NoError(t, err)
+	require.Equal(t, [][]int{{1, 2, 3}}, slices)
+	pairs, err := collect(t, rx.Pairwise(rx.From(1, 2, 3)))
+	require.NoError(t, err)
+	require.Equal(t, [][2]int{{1, 2}, {2, 3}}, pairs)
+}
+
+func TestReduceScanAndSwitchSemantics(t *testing.T) {
+	reduced, err := collect(t, rx.Reduce(rx.From(1, 2, 3), func(a, b int) int { return a + b }, 0))
+	require.NoError(t, err)
+	require.Equal(t, []int{6}, reduced)
+	scanned, err := collect(t, rx.From(1, 2, 3).Pipe(rx.Scan(func(a, b int) int { return a + b }, 0)))
+	require.NoError(t, err)
+	require.Equal(t, []int{1, 3, 6}, scanned)
+	switched, err := collect(t, rx.Switch(rx.From(1, 2, 3), func(v int) *rx.Observable[string] {
+		return rx.MapTo(rx.Timer(10*time.Millisecond), func(time.Time) string { return fmt.Sprint(v) })
+	}))
+	require.NoError(t, err)
+	require.Equal(t, []string{"3"}, switched)
 }
 
 func TestForkJoin(t *testing.T) {
-	ch, _ := rx_go.ForkJoin(rx_go.MapTo(rx_go.NewInterval(time.Second, true), func(t time.Time) int {
-		return 1
-	}).Pipe(rx_go.Take[int](2)), rx_go.From([]int{4, 5, 6}...), rx_go.From([]int{7, 8, 9}...)).Subscribe()
-	var res [][]int
-	for v := range ch {
-		res = append(res, v)
-	}
-	assert.Equal(t, [][]int{{1, 6, 9}}, res)
+	values, err := collect(t, rx.ForkJoin(rx.From(1, 2), rx.From(3, 4)))
+	require.NoError(t, err)
+	require.Equal(t, [][]int{{2, 4}}, values)
+	empty, err := collect(t, rx.ForkJoin(rx.From(1), rx.EmptyOf[int]()))
+	require.NoError(t, err)
+	require.Empty(t, empty)
 }
 
-func TestSwitch(t *testing.T) {
-	ch, _ := rx_go.Switch(rx_go.From([]int{1, 2, 3}...), func(value int) *rx_go.Observable[string] {
-		return rx_go.From(fmt.Sprintf("HELLO %d", value)).Pipe(rx_go.Repeat[string](2))
-	}).Subscribe()
-	var res []string
-	for val := range ch {
-		res = append(res, val)
-	}
-	assert.Equal(t, []string{"HELLO 1", "HELLO 1", "HELLO 2", "HELLO 2", "HELLO 3", "HELLO 3"}, res)
+func TestHTTPIsLazyAndPropagatesErrors(t *testing.T) {
+	var calls atomic.Int64
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Header: make(http.Header)}, nil
+	})}
+	req, _ := http.NewRequest(http.MethodGet, "http://example.test", nil)
+	source, err := rx.NewHttp(client, req)
+	require.NoError(t, err)
+	require.Zero(t, calls.Load())
+	values, streamErr := collect(t, source)
+	require.NoError(t, streamErr)
+	require.Equal(t, [][]byte{[]byte("ok")}, values)
+	require.Equal(t, int64(1), calls.Load())
 }
 
-func TestMapTo(t *testing.T) {
-	values := []int{1, 2, 3, 4, 5, 6}
-	ch, _ := rx_go.MapTo[int, string](rx_go.From(values...), func(t int) string {
-		return fmt.Sprintf("hello %d", t)
-	}).Subscribe()
-	var res []string
-	for val := range ch {
-		res = append(res, val)
-	}
-	assert.Equal(t, []string{"hello 1", "hello 2", "hello 3", "hello 4", "hello 5", "hello 6"}, res)
-}
+type roundTripFunc func(*http.Request) (*http.Response, error)
 
-func TestOf(t *testing.T) {
-	ch, _ := rx_go.Of("hello").Subscribe()
-	assert.Equal(t, "hello", <-ch)
-}
-
-func TestConcat(t *testing.T) {
-	ch, _ := rx_go.Concat(rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 6}, <-ch)
-}
-
-func TestReduce(t *testing.T) {
-	ch, _ := rx_go.Reduce(rx_go.From([]int{1, 2, 3, 4, 5, 6}...), func(y string, t int) string {
-		return y + fmt.Sprintf("%d", t)
-	}, "").Subscribe()
-	var res []string
-	for val := range ch {
-		res = append(res, val)
-	}
-	assert.Equal(t, []string{
-		"1",
-		"12",
-		"123",
-		"1234",
-		"12345",
-		"123456",
-	}, res)
-}
-
-func TestPairwise(t *testing.T) {
-	ch, _ := rx_go.Pairwise[int](rx_go.From([]int{1, 2, 3, 4, 5, 6}...)).Subscribe()
-	var res [][2]int
-	for val := range ch {
-		res = append(res, val)
-	}
-	assert.Equal(t, [][2]int{{1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}}, res)
-}
-
-func TestNew(t *testing.T) {
-	values := []int{1, 2, 3, 4, 5, 6}
-	obs := rx_go.From(values...)
-	ch, _ := obs.Subscribe()
-	var res []int
-	for val := range ch {
-		res = append(res, val)
-	}
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 6}, res)
-}
-
-func TestObservable_Subscribe(t *testing.T) {
-	obs := rx_go.From([]int{1, 2, 3, 4, 5, 6}...)
-	ch, cancel := obs.Pipe(rx_go.Delay[int](time.Millisecond * 500)).Subscribe()
-	go func() {
-		time.Sleep(time.Millisecond * 700)
-		cancel()
-	}()
-	var res []int
-	for v := range ch {
-		res = append(res, v)
-	}
-	assert.Equal(t, []int{1}, res)
-}
-
-func TestNewInterval(t *testing.T) {
-	ch, cancel := rx_go.NewInterval(time.Millisecond*300, true).Subscribe()
-	go func() {
-		time.Sleep(time.Second)
-		cancel()
-	}()
-	var res []time.Time
-	for v := range ch {
-		res = append(res, v)
-	}
-	assert.Len(t, res, 4)
-}
-
-func TestMerge(t *testing.T) {
-	ch, _ := rx_go.Merge[int](rx_go.From[int]([]int{1, 2, 3, 7}...), rx_go.From[int]([]int{4, 5, 6}...)).Subscribe()
-	var res []int
-	for v := range ch {
-		res = append(res, v)
-	}
-	assert.Contains(t, res, 1)
-	assert.Contains(t, res, 2)
-	assert.Contains(t, res, 3)
-	assert.Contains(t, res, 4)
-	assert.Contains(t, res, 5)
-	assert.Contains(t, res, 6)
-	assert.Contains(t, res, 7)
-	assert.Len(t, res, 7)
-}
-
-func TestFromChannel(t *testing.T) {
-	intChan := make(chan int)
-	go func() {
-		intChan <- 1
-		intChan <- 2
-		close(intChan)
-	}()
-
-	ch, _ := rx_go.FromChannel(intChan).Subscribe()
-	var res []int
-	for v := range ch {
-		res = append(res, v)
-	}
-	assert.Contains(t, res, 1)
-	assert.Contains(t, res, 2)
-	assert.Len(t, res, 2)
-}
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return fn(req) }

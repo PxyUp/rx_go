@@ -1,7 +1,7 @@
 package rx_go
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -20,7 +20,7 @@ func HttpObserver(client *http.Client, req *http.Request) (*Observer[[]byte], er
 		defer resp.Body.Close()
 	}
 
-	bytes, err := ioutil.ReadAll(resp.Body)
+	bytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
