@@ -47,18 +47,18 @@ func TestColdObservableSupportsRepeatedSubscriptions(t *testing.T) {
 func TestCancellationIsSubscriptionLocal(t *testing.T) {
 	source := rx.NewInterval(2*time.Millisecond, true)
 	ctxA, cancelA := context.WithCancel(context.Background())
-	var a, b atomic.Int64
+	var a, b int64
 	sa := source.SubscribeObserver(ctxA, func(time.Time) {
-		if a.Add(1) == 2 {
+		if atomic.AddInt64(&a, 1) == 2 {
 			cancelA()
 		}
 	}, nil, nil)
 	ctxB, cancelB := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancelB()
-	sb := source.SubscribeObserver(ctxB, func(time.Time) { b.Add(1) }, nil, nil)
+	sb := source.SubscribeObserver(ctxB, func(time.Time) { atomic.AddInt64(&b, 1) }, nil, nil)
 	<-sa.Done()
 	<-sb.Done()
-	require.GreaterOrEqual(t, b.Load(), int64(3))
+	require.GreaterOrEqual(t, atomic.LoadInt64(&b), int64(3))
 }
 
 func TestErrorContract(t *testing.T) {
@@ -107,19 +107,19 @@ func TestForkJoin(t *testing.T) {
 }
 
 func TestHTTPIsLazyAndPropagatesErrors(t *testing.T) {
-	var calls atomic.Int64
+	var calls int64
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		calls.Add(1)
+		atomic.AddInt64(&calls, 1)
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Header: make(http.Header)}, nil
 	})}
 	req, _ := http.NewRequest(http.MethodGet, "http://example.test", nil)
 	source, err := rx.NewHttp(client, req)
 	require.NoError(t, err)
-	require.Zero(t, calls.Load())
+	require.Zero(t, atomic.LoadInt64(&calls))
 	values, streamErr := collect(t, source)
 	require.NoError(t, streamErr)
 	require.Equal(t, [][]byte{[]byte("ok")}, values)
-	require.Equal(t, int64(1), calls.Load())
+	require.Equal(t, int64(1), atomic.LoadInt64(&calls))
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

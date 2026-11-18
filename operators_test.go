@@ -62,9 +62,9 @@ func TestCatchRetryAndFinally(t *testing.T) {
 	recovered, err := collect(t, rx.Throw[int](want).Pipe(rx.Catch(func(error) *rx.Observable[int] { return rx.Of(7) })))
 	require.NoError(t, err)
 	require.Equal(t, []int{7}, recovered)
-	var attempts atomic.Int64
+	var attempts int64
 	source := rx.Defer(func() *rx.Observable[int] {
-		if attempts.Add(1) < 3 {
+		if atomic.AddInt64(&attempts, 1) < 3 {
 			return rx.Throw[int](want)
 		}
 		return rx.Of(9)
@@ -72,10 +72,10 @@ func TestCatchRetryAndFinally(t *testing.T) {
 	values, err := collect(t, source)
 	require.NoError(t, err)
 	require.Equal(t, []int{9}, values)
-	require.Equal(t, int64(3), attempts.Load())
-	var finalized atomic.Int64
-	_, _ = collect(t, rx.Of(1).Pipe(rx.Finally[int](func() { finalized.Add(1) })))
-	require.Equal(t, int64(1), finalized.Load())
+	require.Equal(t, int64(3), atomic.LoadInt64(&attempts))
+	var finalized int64
+	_, _ = collect(t, rx.Of(1).Pipe(rx.Finally[int](func() { atomic.AddInt64(&finalized, 1) })))
+	require.Equal(t, int64(1), atomic.LoadInt64(&finalized))
 }
 
 func TestContextOperators(t *testing.T) {

@@ -7,6 +7,21 @@ import (
 	"time"
 )
 
+// These notification types live at package scope because Go 1.18 does not
+// support type declarations inside generic functions.
+type delayedEvent[T any] struct {
+	value    T
+	err      error
+	complete bool
+	at       time.Time
+}
+
+type debounceEvent[T any] struct {
+	value    T
+	err      error
+	complete bool
+}
+
 func lift[T any](next func(T, *Observer[T]), complete func(*Observer[T])) Operator[T] {
 	return func(source *Observable[T]) *Observable[T] {
 		return create(func(ctx context.Context, dst *Observer[T]) func() {
@@ -228,13 +243,7 @@ func Repeat[T any](times uint32) Operator[T] {
 func Delay[T any](delay time.Duration) Operator[T] {
 	return func(source *Observable[T]) *Observable[T] {
 		return create(func(ctx context.Context, dst *Observer[T]) func() {
-			type event struct {
-				value    T
-				err      error
-				complete bool
-				at       time.Time
-			}
-			events := make(chan event)
+			events := make(chan delayedEvent[T])
 			go func() {
 				for {
 					select {
@@ -260,14 +269,14 @@ func Delay[T any](delay time.Duration) Operator[T] {
 					}
 				}
 			}()
-			emit := func(e event) {
+			emit := func(e delayedEvent[T]) {
 				e.at = time.Now().Add(delay)
 				select {
 				case events <- e:
 				case <-ctx.Done():
 				}
 			}
-			return source.subscribe(ctx, newSink(func(v T) { emit(event{value: v}) }, func(err error) { emit(event{err: err}) }, func() { emit(event{complete: true}) }))
+			return source.subscribe(ctx, newSink(func(v T) { emit(delayedEvent[T]{value: v}) }, func(err error) { emit(delayedEvent[T]{err: err}) }, func() { emit(delayedEvent[T]{complete: true}) }))
 		})
 	}
 }
@@ -295,12 +304,7 @@ func InitialDelay[T any](delay time.Duration) Operator[T] {
 func Debounce[T any](duration time.Duration) Operator[T] {
 	return func(source *Observable[T]) *Observable[T] {
 		return create(func(ctx context.Context, dst *Observer[T]) func() {
-			type event struct {
-				value    T
-				err      error
-				complete bool
-			}
-			events := make(chan event)
+			events := make(chan debounceEvent[T])
 			go func() {
 				var timer *time.Timer
 				var timerC <-chan time.Time
@@ -353,13 +357,13 @@ func Debounce[T any](duration time.Duration) Operator[T] {
 					}
 				}
 			}()
-			emit := func(e event) {
+			emit := func(e debounceEvent[T]) {
 				select {
 				case events <- e:
 				case <-ctx.Done():
 				}
 			}
-			return source.subscribe(ctx, newSink(func(v T) { emit(event{value: v}) }, func(err error) { emit(event{err: err}) }, func() { emit(event{complete: true}) }))
+			return source.subscribe(ctx, newSink(func(v T) { emit(debounceEvent[T]{value: v}) }, func(err error) { emit(debounceEvent[T]{err: err}) }, func() { emit(debounceEvent[T]{complete: true}) }))
 		})
 	}
 }
